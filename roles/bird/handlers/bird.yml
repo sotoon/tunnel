@@ -1,0 +1,6 @@
+- name: Restart bird2
+  become: yes
+  become_user: root
+  service:
+    name: bird
+    state: restarted

@@ -1,0 +1,19 @@
+- hosts: gre1
+  gather_facts: true
+  roles:
+    - role: gre
+    - role: bird
+- hosts: gre2
+  gather_facts: true
+  roles:
+    - role: gre
+    - role: bird
+- hosts: gre3
+  gather_facts: true
+  roles:
+    - role: gre
+    - role: bird
+- hosts: localhost
+  gather_facts: true
+  roles:
+    - role: calico

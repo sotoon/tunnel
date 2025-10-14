@@ -1,0 +1,10 @@
+apiVersion: crd.projectcalico.org/v1
+kind: BGPPeer
+metadata:
+  name: {{ name }}
+spec:
+  asNumber: {{ asnumber }}
+  keepOriginalNextHop: true
+  nodeSelector: all()
+  peerIP: "{{ peer_ip }}"
+  sourceAddress: None

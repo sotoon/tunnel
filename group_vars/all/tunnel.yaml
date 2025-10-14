@@ -1,0 +1,4 @@
+tunnel_ip_subnet: 172.16.234.0
+tunnel_ip_range: 172.16.234
+tunnel_cidr: 24
+tunnel_interface_name: gre

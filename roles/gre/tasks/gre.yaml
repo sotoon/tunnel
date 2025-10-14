@@ -1,0 +1,63 @@
+- name: Ensure iproute2 is installed
+  become: yes
+  apt:
+    name: iproute2
+    state: present
+
+- name: Enable and persist IP forwarding (net.ipv4.ip_forward=1)
+  become: yes
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    reload: yes
+    sysctl_file: /etc/sysctl.conf
+
+- name: Setup gre config
+  become: yes
+  become_user: root
+  template:
+    src: 90-gre.yaml.j2
+    dest: /etc/netplan/90-gre.yaml
+    mode: '0400'
+  vars:
+    remote_ip: "{{ hostvars[peer_host]['public_ip'] }}"
+    index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
+    tunnel_address: "{{ tunnel_ip_range }}.{{ index }}/{{ tunnel_cidr }}"
+
+- name: Start gre
+  become: yes
+  command: netplan apply
+
+- name: Get default route interface
+  become: yes
+  command: ip route show default
+  register: default_route
+  when: tunnel_type == "dest"
+
+- name: Extract main interface from default route
+  set_fact:
+    main_interface: "{{ default_route.stdout.split(' ')[4] }}"
+  when: tunnel_type == "dest"
+
+- name: Get all interface IPs
+  become: yes
+  command: ip -4 -o addr show
+  register: interface_ips
+  when: tunnel_type == "dest"
+
+- name: Set fact if any IP is in 10.0.0.0/16
+  set_fact:
+    is_10_0_range: "{{ interface_ips.stdout_lines | select('search', '\\s10\\.0\\.') | list | length > 0 }}"
+  when: tunnel_type == "dest"
+
+- name: Ensure MASQUERADE rule exists on main interface if in 10.0.0.0/16
+  become: yes
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    out_interface: "{{ main_interface }}"
+    jump: MASQUERADE
+    state: present
+  when: tunnel_type == "dest" and is_10_0_range
+

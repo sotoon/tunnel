@@ -1,0 +1,12 @@
+apiVersion: crd.projectcalico.org/v1
+kind: BGPConfiguration
+metadata:
+  name: {{ name }}
+spec:
+  asNumber: {{ asnumber }}
+  bindMode: None
+  listenPort: 178
+  logSeverityScreen: Info
+  nodeToNodeMeshEnabled: true
+  serviceClusterIPs:
+    - cidr: {{ service_cidr }}

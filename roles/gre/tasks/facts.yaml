@@ -1,0 +1,18 @@
+- name: Determine GRE facts
+  set_fact:
+    gre_group: >-
+      {{
+        groups
+        | dict2items
+        | selectattr('key', 'match', '^gre.*')
+        | selectattr('value', 'contains', inventory_hostname)
+        | map(attribute='key')
+        | first
+      }}
+    peer_type: "{{ 'dest' if tunnel_type == 'src' else 'src' }}"
+
+- name: Determine GRE peer
+  set_fact:
+    peer_host: "{{ item }}"
+  when: hostvars[item]['tunnel_type'] == peer_type
+  loop: "{{ groups[gre_group] | difference([inventory_hostname]) }}"

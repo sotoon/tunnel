@@ -1,0 +1,2 @@
+- name: Setup bgp configuration and peer cluster 1
+  include_tasks: bgp.yaml

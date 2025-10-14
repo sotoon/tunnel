@@ -1,0 +1,22 @@
+- name: install bird2
+  become: yes
+  become_user: root
+  apt:
+    name: bird2
+    state: present
+
+- name: Setup bird config
+  become: yes
+  become_user: root
+  template:
+    src: bird.conf.j2
+    dest: /etc/bird/bird.conf
+    mode: '0540'
+  vars:
+    tunnel_local_address: "{{ tunnel_local_address }}"
+    local_ip: "{{ ansible_default_ipv4.address }}"
+    local_subnet: "{{ local_subnet }}"
+    dest_index: "{{ dest_index }}"
+    index: "{{ index }}"
+    tunnel_dest_address: "{{ tunnel_dest_address }}"
+  notify: Restart bird2

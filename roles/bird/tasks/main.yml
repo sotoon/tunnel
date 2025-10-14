@@ -1,0 +1,4 @@
+- name: Gather facts
+  include_tasks: facts.yaml
+- name: Setup bird
+  include_tasks: bird.yaml

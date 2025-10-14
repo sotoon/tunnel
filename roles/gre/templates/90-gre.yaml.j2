@@ -1,0 +1,10 @@
+network:
+  version: 2
+  tunnels:
+    gre:
+      mode: "{{ tunnel_interface_name }}"
+      local: "{{ ansible_default_ipv4.address }}"
+      remote: "{{ remote_ip }}"
+      ttl: 255
+      addresses:
+        - "{{ tunnel_address }}"

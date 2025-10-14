@@ -1,0 +1,33 @@
+- name: Determine GRE group & network spec
+  set_fact:
+    gre_group: >-
+      {{
+        groups
+        | dict2items
+        | selectattr('key', 'match', '^gre.*')
+        | selectattr('value', 'contains', inventory_hostname)
+        | map(attribute='key')
+        | first
+      }}
+    local_subnet: "{{ ansible_default_ipv4.network + '/' + (ansible_default_ipv4.prefix | string) }}"
+    interface: "{{ ansible_default_ipv4.interface }}"
+
+- name: Determine peer_type
+  set_fact:
+    peer_type: "{{ 'dest' if tunnel_type == 'src' else 'src' }}"
+
+- name: Determine GRE peer manually
+  set_fact:
+    peer_host: "{{ item }}"
+    index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
+  when: hostvars[item]['tunnel_type'] == peer_type
+  loop: "{{ groups[gre_group] | difference([inventory_hostname]) }}"
+
+- name: Set derived GRE and BGP variables
+  set_fact:
+    dest_index: "{{ (groups['all'] | list).index(peer_host) + 1 }}"
+    tunnel_local_address: "{{ tunnel_ip_range }}.{{ index }}"
+
+- name: Set derived GRE and BGP variables
+  set_fact:
+    tunnel_dest_address: "{{ tunnel_ip_range }}.{{ dest_index }}"

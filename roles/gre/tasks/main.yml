@@ -1,0 +1,4 @@
+- name: GRE facts
+  include_tasks: facts.yaml
+- name: Setup gre
+  include_tasks: gre.yaml
