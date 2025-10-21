@@ -1,0 +1,12 @@
+[Interface]
+PrivateKey = {{ private_key_content }}
+Address = {{ tunnel_address }}
+ListenPort = {{ listen_port }}
+Table = off
+
+[Peer]
+PublicKey = {{ peer_public_key }}
+Endpoint = {{ remote_ip }}:{{ listen_port }}
+AllowedIPs = {{ tunnel_ip_range }}.0/{{ tunnel_cidr }}
+
+PersistentKeepalive = 25

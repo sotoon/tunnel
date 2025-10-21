@@ -1,8 +1,8 @@
 router id {{ tunnel_local_address }};
 log syslog all;
 
-{% set gre_group = groups | dict2items | selectattr('key', 'match', '^gre.*') | selectattr('value', 'contains', inventory_hostname) | map(attribute='key') | first %}
-{% set group_num = gre_group | regex_replace('^gre', '') | int %}
+{% set gre_group = groups | dict2items | selectattr('key', 'match', '^(gre|wireguard).*') | selectattr('value', 'contains', inventory_hostname) | map(attribute='key') | first %}
+{% set group_num = gre_group | regex_replace('^(gre|wireguard)', '') | int %}
 {% set as_prefix = '60' ~ group_num ~ '0' %}  {# Changed 1 to 0 here #}
 {% if 'KUBE_WORKERS_1' in vars and inventory_hostname in KUBE_WORKERS_1 %}
     {% set workers_index = 1 %}

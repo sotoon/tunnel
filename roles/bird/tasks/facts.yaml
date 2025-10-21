@@ -1,10 +1,10 @@
-- name: Determine GRE group & network spec
+- name: Determine tunnel group & network spec
   set_fact:
     gre_group: >-
       {{
         groups
         | dict2items
-        | selectattr('key', 'match', '^gre.*')
+        | selectattr('key', 'match', '^(gre|wireguard).*')
         | selectattr('value', 'contains', inventory_hostname)
         | map(attribute='key')
         | first

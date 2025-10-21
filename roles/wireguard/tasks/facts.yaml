@@ -1,0 +1,18 @@
+- name: Determine WireGuard facts
+  set_fact:
+    wireguard_group: >-
+      {{
+        groups
+        | dict2items
+        | selectattr('key', 'match', '^wireguard.*')
+        | selectattr('value', 'contains', inventory_hostname)
+        | map(attribute='key')
+        | first
+      }}
+    peer_type: "{{ 'dest' if tunnel_type == 'src' else 'src' }}"
+
+- name: Determine WireGuard peer
+  set_fact:
+    peer_host: "{{ item }}"
+  when: hostvars[item]['tunnel_type'] == peer_type
+  loop: "{{ groups[wireguard_group] | difference([inventory_hostname]) }}"

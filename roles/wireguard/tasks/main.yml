@@ -1,0 +1,4 @@
+- name: WireGuard facts
+  include_tasks: facts.yaml
+- name: Setup wireguard
+  include_tasks: wireguard.yaml
