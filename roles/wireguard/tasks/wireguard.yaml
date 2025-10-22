@@ -154,7 +154,7 @@
   vars:
     remote_ip: "{{ hostvars[peer_host]['public_ip'] }}"
     index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
-    tunnel_address: "{{ tunnel_ip_range }}.{{ item.ip_offset + (10 if tunnel_type == 'dest' else 1) }}/{{ tunnel_cidr }}"
+    tunnel_address: "{{ tunnel_ip_range }}.{{ item.ip_offset + (20 if tunnel_type == 'dest' else 1) }}/{{ tunnel_cidr }}"
     private_key_content: "{{ item.private_key_content }}"
     peer_public_key: "{{ item.peer_public_key }}"
     listen_port: "{{ wireguard_port + item.port_offset }}"

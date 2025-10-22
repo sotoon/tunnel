@@ -8,9 +8,9 @@ wireguard_public_key_path: /etc/wireguard/public_key
 # Default configuration for physical interfaces (can be overridden in inventory)
 default_physical_interfaces:
   - name: eth0
-    wg_count: 4
+    wg_count: 8
   - name: eth1
-    wg_count: 4
+    wg_count: 8
 
 # Base IP ranges for different interface groups
 # Each physical interface gets its own range of IPs
