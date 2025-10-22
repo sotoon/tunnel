@@ -1,0 +1,8 @@
+- name: Add WireGuard interfaces for {{ phy_if.name }}
+  set_fact:
+    wg_interfaces: "{{ wg_interfaces + [{'name': 'wg' + (wg_counter + item) | string, 'physical_interface': phy_if.name, 'index': wg_counter + item, 'port_offset': wg_counter + item, 'ip_offset': wg_counter + item, 'fwmark': wg_counter + item + 1}] }}"
+  loop: "{{ range(phy_if.wg_count) | list }}"
+
+- name: Update WireGuard counter for next physical interface
+  set_fact:
+    wg_counter: "{{ wg_counter | int + phy_if.wg_count }}"

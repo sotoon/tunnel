@@ -1,12 +1,12 @@
 - name: Ensure wireguard is installed
-  become: yes
+  become: true
   apt:
     name: wireguard
     state: present
   tags: wireguard
 
 - name: Enable and persist IP forwarding (net.ipv4.ip_forward=1)
-  become: yes
+  become: true
   sysctl:
     name: net.ipv4.ip_forward
     value: "1"
@@ -16,7 +16,7 @@
   tags: wireguard
 
 - name: Set multipath hash policy
-  become: yes
+  become: true
   sysctl:
     name: net.ipv4.fib_multipath_hash_policy
     value: "1"
@@ -26,7 +26,7 @@
   tags: wireguard
 
 - name: Set multipath use neighbor
-  become: yes
+  become: true
   sysctl:
     name: net.ipv4.fib_multipath_use_neigh
     value: "1"
@@ -36,366 +36,243 @@
   tags: wireguard
 
 - name: Create WireGuard directory
-  become: yes
+  become: true
   file:
     path: /etc/wireguard
     state: directory
     mode: "0700"
   tags: wireguard
 
-- name: Generate private key for wg0
-  become: yes
+- name: Set default physical interfaces if not defined
+  set_fact:
+    physical_interfaces: "{{ default_physical_interfaces }}"
+  when: physical_interfaces is not defined
+
+- name: Initialize WireGuard interface list
+  set_fact:
+    wg_interfaces: []
+    wg_counter: 0
+
+- name: Build WireGuard interfaces for each physical interface
+  include_tasks: wireguard_interface_loop.yaml
+  loop: "{{ physical_interfaces }}"
+  loop_control:
+    loop_var: phy_if
+    index_var: phy_idx
+
+- name: Debug physical interfaces
+  debug:
+    msg: "Physical interfaces: {{ physical_interfaces }}"
+
+- name: Debug WireGuard interfaces
+  debug:
+    msg: "Generated interfaces: {{ wg_interfaces }}"
+
+- name: Generate private keys for all WireGuard interfaces
+  become: true
   command: wg genkey
-  register: private_key_wg0
+  register: private_key_result
+  loop: "{{ wg_interfaces }}"
+  loop_control:
+    loop_var: wg_interface
   when: not ansible_check_mode
   tags: wireguard
 
-- name: Generate private key for wg1
-  become: yes
-  command: wg genkey
-  register: private_key_wg1
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Generate private key for wg2
-  become: yes
-  command: wg genkey
-  register: private_key_wg2
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Generate private key for wg3
-  become: yes
-  command: wg genkey
-  register: private_key_wg3
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Save private key for wg0
-  become: yes
+- name: Save private keys for all WireGuard interfaces
+  become: true
   copy:
-    content: "{{ private_key_wg0.stdout }}"
-    dest: "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg0') }}"
+    content: "{{ item.stdout }}"
+    dest: "{{ wireguard_private_key_path | replace('private_key', 'private_key_' + item.wg_interface.name) }}"
     mode: "0600"
+  loop: "{{ private_key_result.results }}"
   when: not ansible_check_mode
   tags: wireguard
 
-- name: Save private key for wg1
-  become: yes
+- name: Generate public keys for all WireGuard interfaces
+  become: true
+  shell: wg pubkey < "{{ wireguard_private_key_path | replace('private_key', 'private_key_' + wg_interface.name) }}"
+  register: public_key_result
+  loop: "{{ wg_interfaces }}"
+  loop_control:
+    loop_var: wg_interface
+  when: not ansible_check_mode
+  tags: wireguard
+
+- name: Save public keys for all WireGuard interfaces
+  become: true
   copy:
-    content: "{{ private_key_wg1.stdout }}"
-    dest: "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg1') }}"
-    mode: "0600"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Save private key for wg2
-  become: yes
-  copy:
-    content: "{{ private_key_wg2.stdout }}"
-    dest: "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg2') }}"
-    mode: "0600"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Save private key for wg3
-  become: yes
-  copy:
-    content: "{{ private_key_wg3.stdout }}"
-    dest: "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg3') }}"
-    mode: "0600"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Generate public key for wg0
-  become: yes
-  shell: wg pubkey < "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg0') }}"
-  register: public_key_wg0
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Generate public key for wg1
-  become: yes
-  shell: wg pubkey < "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg1') }}"
-  register: public_key_wg1
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Generate public key for wg2
-  become: yes
-  shell: wg pubkey < "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg2') }}"
-  register: public_key_wg2
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Generate public key for wg3
-  become: yes
-  shell: wg pubkey < "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg3') }}"
-  register: public_key_wg3
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Save public key for wg0
-  become: yes
-  copy:
-    content: "{{ public_key_wg0.stdout }}"
-    dest: "{{ wireguard_public_key_path | replace('public_key', 'public_key_wg0') }}"
+    content: "{{ item.stdout }}"
+    dest: "{{ wireguard_public_key_path | replace('public_key', 'public_key_' + item.wg_interface.name) }}"
     mode: "0644"
+  loop: "{{ public_key_result.results }}"
   when: not ansible_check_mode
   tags: wireguard
 
-- name: Save public key for wg1
-  become: yes
-  copy:
-    content: "{{ public_key_wg1.stdout }}"
-    dest: "{{ wireguard_public_key_path | replace('public_key', 'public_key_wg1') }}"
-    mode: "0644"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Save public key for wg2
-  become: yes
-  copy:
-    content: "{{ public_key_wg2.stdout }}"
-    dest: "{{ wireguard_public_key_path | replace('public_key', 'public_key_wg2') }}"
-    mode: "0644"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Save public key for wg3
-  become: yes
-  copy:
-    content: "{{ public_key_wg3.stdout }}"
-    dest: "{{ wireguard_public_key_path | replace('public_key', 'public_key_wg3') }}"
-    mode: "0644"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Get peer public key for wg0
-  become: yes
+- name: Get peer public keys for all WireGuard interfaces
+  become: true
   slurp:
-    src: "{{ wireguard_public_key_path | replace('public_key', 'public_key_wg0') }}"
-  register: peer_public_key_wg0
+    src: "{{ wireguard_public_key_path | replace('public_key', 'public_key_' + wg_interface.name) }}"
+  register: peer_public_key_result
   delegate_to: "{{ peer_host }}"
+  loop: "{{ wg_interfaces }}"
+  loop_control:
+    loop_var: wg_interface
   when: not ansible_check_mode
   tags: wireguard
 
-- name: Get peer public key for wg1
-  become: yes
+- name: Read private key content for all WireGuard interfaces
+  become: true
   slurp:
-    src: "{{ wireguard_public_key_path | replace('public_key', 'public_key_wg1') }}"
-  register: peer_public_key_wg1
-  delegate_to: "{{ peer_host }}"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Get peer public key for wg2
-  become: yes
-  slurp:
-    src: "{{ wireguard_public_key_path | replace('public_key', 'public_key_wg2') }}"
-  register: peer_public_key_wg2
-  delegate_to: "{{ peer_host }}"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Get peer public key for wg3
-  become: yes
-  slurp:
-    src: "{{ wireguard_public_key_path | replace('public_key', 'public_key_wg3') }}"
-  register: peer_public_key_wg3
-  delegate_to: "{{ peer_host }}"
-  when: not ansible_check_mode
-  tags: wireguard
-
-- name: Read private key content for wg0
-  become: yes
-  slurp:
-    src: "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg0') }}"
-  register: private_key_content_wg0
+    src: "{{ wireguard_private_key_path | replace('private_key', 'private_key_' + wg_interface.name) }}"
+  register: private_key_content_result
+  loop: "{{ wg_interfaces }}"
+  loop_control:
+    loop_var: wg_interface
   when: not ansible_check_mode
 
-- name: Read private key content for wg1
-  become: yes
-  slurp:
-    src: "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg1') }}"
-  register: private_key_content_wg1
-  when: not ansible_check_mode
+- name: Create combined interface data with keys
+  set_fact:
+    wg_interfaces_with_keys: >-
+      {%- set combined = [] -%}
+      {%- for i in range(wg_interfaces | length) -%}
+        {%- set interface_data = wg_interfaces[i].copy() -%}
+        {%- set _ = interface_data.update({
+          'private_key_content': private_key_content_result.results[i].content | b64decode | trim,
+          'peer_public_key': peer_public_key_result.results[i].content | b64decode | trim
+        }) -%}
+        {%- set _ = combined.append(interface_data) -%}
+      {%- endfor -%}
+      {{ combined }}
 
-- name: Read private key content for wg2
-  become: yes
-  slurp:
-    src: "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg2') }}"
-  register: private_key_content_wg2
-  when: not ansible_check_mode
-
-- name: Read private key content for wg3
-  become: yes
-  slurp:
-    src: "{{ wireguard_private_key_path | replace('private_key', 'private_key_wg3') }}"
-  register: private_key_content_wg3
-  when: not ansible_check_mode
-
-- name: Setup WireGuard config for wg0
-  become: yes
+- name: Setup WireGuard config for all interfaces
+  become: true
   become_user: root
   template:
     src: wg0.conf.j2
-    dest: "/etc/wireguard/wg0.conf"
+    dest: "/etc/wireguard/{{ item.name }}.conf"
     mode: "0600"
   vars:
     remote_ip: "{{ hostvars[peer_host]['public_ip'] }}"
     index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
-    tunnel_address: "{{ tunnel_ip_range }}.{{ index }}/{{ tunnel_cidr }}"
-    private_key_content: "{{ private_key_content_wg0.content | b64decode | trim }}"
-    peer_public_key: "{{ peer_public_key_wg0.content | b64decode | trim }}"
-    listen_port: "{{ wireguard_port }}"
-    machine_range: "{{ interface_ranges.wg0.machine_range }}"
-    engine_range: "{{ interface_ranges.wg0.engine_range }}"
+    tunnel_address: "{{ tunnel_ip_range }}.{{ item.ip_offset + (10 if tunnel_type == 'dest' else 1) }}/{{ tunnel_cidr }}"
+    private_key_content: "{{ item.private_key_content }}"
+    peer_public_key: "{{ item.peer_public_key }}"
+    listen_port: "{{ wireguard_port + item.port_offset }}"
+    physical_interface: "{{ item.physical_interface }}"
+    machine_range: "{{ interface_base_ranges[item.physical_interface].machine_range }}"
+    engine_range: "{{ interface_base_ranges[item.physical_interface].engine_range }}"
+    fwmark: "{{ item.fwmark }}"
+  loop: "{{ wg_interfaces_with_keys }}"
   tags: wireguard
 
-- name: Setup WireGuard config for wg1
-  become: yes
-  become_user: root
-  template:
-    src: wg0.conf.j2
-    dest: "/etc/wireguard/wg1.conf"
-    mode: "0600"
-  vars:
-    remote_ip: "{{ hostvars[peer_host]['public_ip'] }}"
-    index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
-    tunnel_address: "{{ tunnel_ip_range }}.{{ index + 10 }}/{{ tunnel_cidr }}"
-    private_key_content: "{{ private_key_content_wg1.content | b64decode | trim }}"
-    peer_public_key: "{{ peer_public_key_wg1.content | b64decode | trim }}"
-    listen_port: "{{ wireguard_port + 1 }}"
-    machine_range: "{{ interface_ranges.wg1.machine_range }}"
-    engine_range: "{{ interface_ranges.wg1.engine_range }}"
+- name: Create systemd override directory for wg-quick service
+  become: true
+  file:
+    path: /etc/systemd/system/wg-quick@.service.d
+    state: directory
+    mode: "0755"
   tags: wireguard
 
-- name: Setup WireGuard config for wg2
-  become: yes
-  become_user: root
-  template:
-    src: wg0.conf.j2
-    dest: "/etc/wireguard/wg2.conf"
-    mode: "0600"
-  vars:
-    remote_ip: "{{ hostvars[peer_host]['public_ip'] }}"
-    index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
-    tunnel_address: "{{ tunnel_ip_range }}.{{ index + 20 }}/{{ tunnel_cidr }}"
-    private_key_content: "{{ private_key_content_wg2.content | b64decode | trim }}"
-    peer_public_key: "{{ peer_public_key_wg2.content | b64decode | trim }}"
-    listen_port: "{{ wireguard_port + 2 }}"
-    machine_range: "{{ interface_ranges.wg2.machine_range }}"
-    engine_range: "{{ interface_ranges.wg2.engine_range }}"
+- name: Create systemd override for wg-quick service
+  become: true
+  copy:
+    content: |
+      [Service]
+      Type=exec
+      ExecStart=
+      ExecStart=/usr/bin/bash -c '/usr/bin/wg-quick up %i && ip link show %i'
+    dest: /etc/systemd/system/wg-quick@.service.d/override.conf
+    mode: "0644"
+  register: systemd_override_result
   tags: wireguard
 
-- name: Setup WireGuard config for wg3
-  become: yes
-  become_user: root
-  template:
-    src: wg0.conf.j2
-    dest: "/etc/wireguard/wg3.conf"
-    mode: "0600"
-  vars:
-    remote_ip: "{{ hostvars[peer_host]['public_ip'] }}"
-    index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
-    tunnel_address: "{{ tunnel_ip_range }}.{{ index + 30 }}/{{ tunnel_cidr }}"
-    private_key_content: "{{ private_key_content_wg3.content | b64decode | trim }}"
-    peer_public_key: "{{ peer_public_key_wg3.content | b64decode | trim }}"
-    listen_port: "{{ wireguard_port + 3 }}"
-    machine_range: "{{ interface_ranges.wg3.machine_range }}"
-    engine_range: "{{ interface_ranges.wg3.engine_range }}"
-  tags: wireguard
-
-- name: Enable WireGuard service for wg0
-  become: yes
+- name: Reload systemd daemon configuration
+  become: true
   systemd:
-    name: "wg-quick@wg0"
-    enabled: yes
-    state: started
-  ignore_errors: yes
+    daemon_reload: true
+  when: systemd_override_result.changed
   tags: wireguard
 
-- name: Enable WireGuard service for wg1
-  become: yes
-  systemd:
-    name: "wg-quick@wg1"
-    enabled: yes
-    state: started
-  ignore_errors: yes
+- name: Re-execute systemd daemon
+  become: true
+  command: systemctl daemon-reexec
+  when: systemd_override_result.changed
   tags: wireguard
 
-- name: Enable WireGuard service for wg2
-  become: yes
+- name: Enable WireGuard services for all interfaces
+  become: true
   systemd:
-    name: "wg-quick@wg2"
-    enabled: yes
+    name: "wg-quick@{{ wg_interface.name }}"
+    enabled: true
     state: started
-  ignore_errors: yes
+    daemon_reload: true
+  ignore_errors: true
+  loop: "{{ wg_interfaces }}"
+  loop_control:
+    loop_var: wg_interface
   tags: wireguard
 
-- name: Enable WireGuard service for wg3
-  become: yes
+- name: Ensure WireGuard services are running
+  become: true
   systemd:
-    name: "wg-quick@wg3"
-    enabled: yes
-    state: started
-  ignore_errors: yes
+    name: "wg-quick@{{ wg_interface.name }}"
+    state: restarted
+  ignore_errors: true
+  loop: "{{ wg_interfaces }}"
+  loop_control:
+    loop_var: wg_interface
   tags: wireguard
 
 - name: Wait for WireGuard interfaces to be up
-  become: yes
+  become: true
   wait_for:
-    path: /sys/class/net/wg0
+    path: "/sys/class/net/{{ wg_interface.name }}"
     timeout: 30
-  tags: wireguard
-
-- name: Wait for WireGuard interfaces to be up
-  become: yes
-  wait_for:
-    path: /sys/class/net/wg1
-    timeout: 30
-  tags: wireguard
-
-- name: Wait for WireGuard interfaces to be up
-  become: yes
-  wait_for:
-    path: /sys/class/net/wg2
-    timeout: 30
-  tags: wireguard
-
-- name: Wait for WireGuard interfaces to be up
-  become: yes
-  wait_for:
-    path: /sys/class/net/wg3
-    timeout: 30
+  loop: "{{ wg_interfaces }}"
+  loop_control:
+    loop_var: wg_interface
   tags: wireguard
 
 - name: Remove all existing routes for tunnel network
-  become: yes
+  become: true
   shell: |
     # Remove all possible routes for the tunnel network
     ip route del {{ tunnel_ip_range }}.0/{{ tunnel_cidr }} 2>/dev/null || true
     ip route del {{ tunnel_ip_range }}.0/24 2>/dev/null || true
-    # Also remove any routes that might have been added by WireGuard
-    for dev in wg0 wg1 wg2 wg3; do
-      ip route del {{ tunnel_ip_range }}.0/{{ tunnel_cidr }} dev $dev 2>/dev/null || true
-    done
+    # Remove individual WireGuard interface routes
+    {% for wg_interface in wg_interfaces %}
+    ip route del {{ tunnel_ip_range }}.0/{{ tunnel_cidr }} dev {{ wg_interface.name }} 2>/dev/null || true
+    {% endfor %}
   tags: wireguard
 
-- name: Add multipath route for tunnel network
-  become: yes
+- name: Build multipath route command with weights
+  set_fact:
+    multipath_route_cmd: "ip route add {{ tunnel_ip_range }}.0/{{ tunnel_cidr }} {% for wg_interface in wg_interfaces %}nexthop dev {{ wg_interface.name }} weight 1{% if not loop.last %} {% endif %}{% endfor %}"
+
+- name: Add multipath route for tunnel network (only if not exists)
+  become: true
   shell: |
-    # Add multipath route
-    ip route add {{ tunnel_ip_range }}.0/{{ tunnel_cidr }} \
-      nexthop dev wg0 \
-      nexthop dev wg1 \
-      nexthop dev wg2 \
-      nexthop dev wg3
+    # Check if route already exists
+    if ! ip route show | grep -q "{{ tunnel_ip_range }}.0/{{ tunnel_cidr }}"; then
+      # Add multipath route with equal weights
+      {{ multipath_route_cmd }}
+    fi
+  tags: wireguard
+
+- name: Add FwMark rules for WireGuard interfaces
+  become: true
+  shell: |
+    # Remove existing rule if it exists
+    ip rule del fwmark {{ item.fwmark }} table {{ item.physical_interface }}_table 2>/dev/null || true
+    # Add new rule
+    ip rule add fwmark {{ item.fwmark }} table {{ item.physical_interface }}_table
+  loop: "{{ wg_interfaces_with_keys }}"
+  when: tunnel_type == "src"
+  ignore_errors: true
   tags: wireguard
 
 - name: Get default route interface
-  become: yes
+  become: true
   command: ip route show default
   register: default_route
   when: tunnel_type == "dest"
@@ -408,7 +285,7 @@
   tags: wireguard
 
 - name: Get all interface IPs
-  become: yes
+  become: true
   command: ip -4 -o addr show
   register: interface_ips
   when: tunnel_type == "dest"
@@ -421,7 +298,7 @@
   tags: wireguard
 
 - name: Ensure MASQUERADE rule exists on main interface if in 10.0.0.0/16
-  become: yes
+  become: true
   ansible.builtin.iptables:
     table: nat
     chain: POSTROUTING

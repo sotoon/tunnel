@@ -1,275 +1,166 @@
-# Multi-Level Network Connectivity with GRE, BGP, and Kubernetes
+# WireGuard Tunnel Configuration
 
-An Ansible-based automation system providing three levels of network connectivity: VM-to-VM tunneling, BGP route propagation, and multi-cluster Kubernetes networking.
+This Ansible playbook sets up WireGuard tunnels with support for multiple WireGuard interfaces per physical network interface.
 
-## Overview
+## Features
 
-This playbook enables flexible network connectivity across geographically distributed or network-isolated infrastructure. You can use each level independently or combine them based on your needs:
-
-### Three Levels of Connectivity
-
-1. **[Level 1: GRE Tunnels](roles/gre/README.md)** - VM Connectivity
-
-   - Establish GRE tunnels between virtual machines
-   - Connect VMs across different networks or data centers
-   - Use independently for simple VM-to-VM connectivity
-
-2. **[Level 2: BIRD BGP](roles/bird/README.md)** - Route Propagation
-
-   - Populate routes between machines using BGP
-   - Dynamic routing with failover and load balancing
-   - Requires Level 1 (GRE tunnels) to be configured first
-
-3. **[Level 3: Calico BGP](roles/calico/README.md)** - Kubernetes Clusters
-   - Connect multiple Kubernetes clusters
-   - Enable cross-cluster pod and service communication
-   - Requires Level 1 and Level 2 to be configured first
-
-## Quick Start
-
-### Prerequisites
-
-- **Operating System**: Ubuntu (uses netplan and apt)
-- **Ansible**: Version 2.9 or higher
-- **Python**: Python 3
-- **Ansible Collections**: `kubernetes.core` (for Level 3 only)
-- **Access**: SSH access with sudo privileges
-- **Network**: Public IPs for tunnel endpoints, GRE traffic allowed (IP protocol 47)
-
-### Installation
-
-1. Clone this repository:
-
-```bash
-git clone <repository-url>
-cd tunnel
-```
-
-2. Install required Ansible collections (if using Level 3):
-
-```bash
-ansible-galaxy collection install kubernetes.core
-```
-
-3. Configure your inventory:
-
-```bash
-cp -r inventory/sample inventory/myenv
-vim inventory/myenv/hosts.yml
-```
-
-4. Configure variables:
-
-```bash
-vim group_vars/all/tunnel.yaml
-vim group_vars/all/kube.yaml  # Only for Level 3
-```
-
-### Basic Usage
-
-**Deploy all levels:**
-
-```bash
-ansible-playbook -i inventory/sample/hosts.yml site.yml
-```
-
-**Deploy Level 1 only (GRE tunnels):**
-
-```bash
-ansible-playbook -i inventory/sample/hosts.yml site.yml --tags gre
-```
-
-**Deploy Level 1 + Level 2 (GRE + BIRD):**
-
-```bash
-ansible-playbook -i inventory/sample/hosts.yml site.yml --limit gre1,gre2,gre3
-```
-
-**Deploy Level 3 only (Calico):**
-
-```bash
-ansible-playbook -i inventory/sample/hosts.yml site.yml --tags calico
-```
-
-## Project Structure
-
-```
-.
-├── README.md                          # This file
-├── site.yml                           # Main playbook
-├── inventory/
-│   └── sample/
-│       └── hosts.yml                  # Sample inventory
-├── group_vars/
-│   └── all/
-│       ├── main.yml                   # Variable includes
-│       ├── tunnel.yaml                # GRE tunnel configuration
-│       └── kube.yaml                  # Kubernetes configuration
-└── roles/
-    ├── gre/                           # Level 1: GRE Tunnels
-    │   └── README.md                  # GRE role documentation
-    ├── bird/                          # Level 2: BGP Routing
-    │   └── README.md                  # BIRD role documentation
-    └── calico/                        # Level 3: Kubernetes
-        └── README.md                  # Calico role documentation
-```
+- **Dynamic Interface Configuration**: Configure different physical interfaces per host
+- **Multiple WireGuard per Interface**: Support for multiple WireGuard tunnels per physical interface
+- **Flexible Interface Names**: Support for any interface naming convention (eth, ens, etc.)
+- **Automatic IP Range Management**: Each physical interface gets its own IP range
+- **Multipath Routing**: Load balancing across multiple WireGuard tunnels
 
 ## Configuration
 
-### Inventory Setup
+### Inventory Configuration
 
-Define your tunnel endpoints in `inventory/<env>/hosts.yml`:
+Each host can define its physical interfaces and the number of WireGuard tunnels per interface:
 
 ```yaml
 all:
   hosts:
-    # Tunnel 1
     machine1:
-      ansible_host: machine-1.example.com
+      ansible_host: your-server-ip
       tunnel_type: src
-      public_ip: 87.247.187.238
+      public_ip: your-public-ip
+      physical_interfaces:
+        - name: eth0
+          wg_count: 4
+        - name: eth1
+          wg_count: 4
     engine1:
-      ansible_host: engine-1.example.com
+      ansible_host: peer-server-ip
       tunnel_type: dest
-      public_ip: 87.247.168.200
-    # Tunnel 2
-    machine2:
-      ansible_host: machine-2.example.com
-      tunnel_type: src
-      public_ip: 87.247.188.64
-    engine2:
-      ansible_host: engine-2.example.com
-      tunnel_type: dest
-      public_ip: 87.247.168.86
-  children:
-    gre1:
-      hosts:
-        machine1:
-        engine1:
-    gre2:
-      hosts:
-        machine2:
-        engine2:
+      public_ip: peer-public-ip
+      physical_interfaces:
+        - name: eth0
+          wg_count: 4
+        - name: eth1
+          wg_count: 4
 ```
 
-**Key Points**:
+### Interface Naming
 
-- Each tunnel requires exactly 2 hosts: one `src` and one `dest`
-- Group tunnels using `gre1`, `gre2`, `gre3`, etc.
-- `public_ip` must be reachable between tunnel endpoints
+The system supports any interface naming convention:
 
-### Global Variables
+- `eth0`, `eth1` (traditional)
+- `ens18`, `ens19` (systemd predictable naming)
+- `enp0s3`, `enp0s8` (PCI-based naming)
+- Any other interface name
 
-Edit `group_vars/all/tunnel.yaml`:
+### IP Range Configuration
+
+Each physical interface gets its own IP range to avoid conflicts:
 
 ```yaml
-tunnel_ip_subnet: 172.16.234.0
-tunnel_ip_range: 172.16.234
-tunnel_cidr: 24
-tunnel_interface_name: gre
+interface_base_ranges:
+  eth0:
+    machine_range: 10.0.0.0/24
+    engine_range: 10.10.0.0/24
+  eth1:
+    machine_range: 10.1.0.0/24
+    engine_range: 10.11.0.0/24
 ```
 
-### Kubernetes Configuration (Level 3 only)
+## WireGuard Interface Generation
 
-Edit `group_vars/all/kube.yaml`:
+The system automatically generates WireGuard interfaces based on the configuration:
+
+- **Interface Naming**: `wg0`, `wg1`, `wg2`, etc.
+- **Port Assignment**: Starting from `wireguard_port` (default: 51820)
+- **IP Assignment**: Each interface gets a unique IP in the tunnel range
+
+### Example with 2 physical interfaces, 4 WireGuard each:
+
+| Physical Interface | WireGuard Interface | Port  | IP Range         |
+| ------------------ | ------------------- | ----- | ---------------- |
+| eth0               | wg0                 | 51820 | 172.16.234.1/24  |
+| eth0               | wg1                 | 51821 | 172.16.234.11/24 |
+| eth0               | wg2                 | 51822 | 172.16.234.21/24 |
+| eth0               | wg3                 | 51823 | 172.16.234.31/24 |
+| eth1               | wg4                 | 51824 | 172.16.234.41/24 |
+| eth1               | wg5                 | 51825 | 172.16.234.51/24 |
+| eth1               | wg6                 | 51826 | 172.16.234.61/24 |
+| eth1               | wg7                 | 51827 | 172.16.234.71/24 |
+
+## Usage
+
+1. **Configure your inventory** in `inventory/your-environment/hosts.yml`
+2. **Update interface ranges** in `group_vars/all/tunnel.yaml` if needed
+3. **Run the playbook**:
+
+```bash
+ansible-playbook -i inventory/your-environment/hosts.yml site.yml
+```
+
+## Advanced Configuration
+
+### Custom Interface Ranges
+
+You can define custom IP ranges for different physical interfaces:
 
 ```yaml
-KUBECONFIG_1: /path/to/cluster1-kubeconfig.yaml
-KUBECONFIG_2: /path/to/cluster2-kubeconfig.yaml
-KUBE_WORKERS_1:
-  - 10.0.0.243
-  - 10.0.0.183
-KUBE_WORKERS_2:
-  - 10.0.10.27
-  - 10.0.10.200
+interface_base_ranges:
+  eth0:
+    machine_range: 10.0.0.0/24
+    engine_range: 10.10.0.0/24
+  ens18:
+    machine_range: 10.2.0.0/24
+    engine_range: 10.12.0.0/24
 ```
 
-## Use Cases
+### Different WireGuard Counts
 
-### Use Case 1: Simple VM-to-VM Connectivity
+You can have different numbers of WireGuard tunnels per interface:
 
-Connect VMs across different networks without BGP or Kubernetes:
-
-```bash
-# Configure only GRE role
-ansible-playbook -i inventory/sample/hosts.yml site.yml --tags gre
+```yaml
+physical_interfaces:
+  - name: eth0
+    wg_count: 2
+  - name: eth1
+    wg_count: 6
 ```
 
-**Result**: Direct encrypted tunnel between VMs using GRE.
+This will create:
 
-### Use Case 2: Multi-Site Routing with BGP
-
-Establish dynamic routing between multiple sites:
-
-```bash
-# Configure GRE + BIRD roles
-ansible-playbook -i inventory/sample/hosts.yml site.yml --limit gre1,gre2,gre3
-```
-
-**Result**: Multiple GRE tunnels with BGP-based route propagation and automatic failover.
-
-### Use Case 3: Multi-Cluster Kubernetes
-
-Connect multiple Kubernetes clusters for pod-to-pod communication:
-
-```bash
-# Configure all three levels
-ansible-playbook -i inventory/sample/hosts.yml site.yml
-```
-
-**Result**: Full stack with GRE tunnels, BGP routing, and Kubernetes cluster networking.
-
-## Documentation
-
-- **[GRE Role Documentation](roles/gre/README.md)** - Level 1: Setting up GRE tunnels
-- **[BIRD Role Documentation](roles/bird/README.md)** - Level 2: Configuring BGP routing
-- **[Calico Role Documentation](roles/calico/README.md)** - Level 3: Connecting Kubernetes clusters
-
-## Verification
-
-### Verify Level 1 (GRE Tunnels)
-
-```bash
-# On tunnel endpoint
-ip tunnel show
-ip addr show gre
-ping {remote_tunnel_ip}
-```
-
-### Verify Level 2 (BIRD BGP)
-
-```bash
-# On tunnel endpoint
-sudo birdc show protocols
-sudo birdc show route
-```
-
-### Verify Level 3 (Calico)
-
-```bash
-# On Kubernetes cluster
-kubectl get bgppeers
-calicoctl node status
-```
+- 2 WireGuard interfaces on eth0 (wg0, wg1)
+- 6 WireGuard interfaces on eth1 (wg2, wg3, wg4, wg5, wg6, wg7)
 
 ## Troubleshooting
 
-For detailed troubleshooting, see the individual role documentation:
+### Check WireGuard Status
 
-- [GRE Troubleshooting](roles/gre/README.md#troubleshooting)
-- [BIRD Troubleshooting](roles/bird/README.md#troubleshooting)
-- [Calico Troubleshooting](roles/calico/README.md#troubleshooting)
+```bash
+# List all WireGuard interfaces
+wg show
 
-## Security Considerations
+# Check interface status
+ip a show wg0
+ip a show wg1
+# ... etc
+```
 
-1. **GRE Tunnels**: GRE is not encrypted by default - consider IPsec or WireGuard for encryption
-2. **BGP Authentication**: Current configuration doesn't use BGP MD5 authentication
-3. **Firewall**: Ensure appropriate firewall rules for GRE (protocol 47) and BGP (TCP 179, 178)
-4. **Access Control**: Secure kubeconfig files and SSH keys
+### Check Routing
 
-## Limitations
+```bash
+# Check multipath routes
+ip route show | grep 172.16.234
 
-- Designed for Ubuntu-based systems (uses netplan and apt)
-- Assumes two Kubernetes clusters for Level 3
-- GRE tunnels are not encrypted by default
-- Requires manual firewall configuration
+# Check specific interface routes
+ip route show dev wg0
+```
+
+### Logs
+
+```bash
+# Check WireGuard service status
+systemctl status wg-quick@wg0
+journalctl -u wg-quick@wg0
+```
+
+## Security Notes
+
+- Private keys are stored with 600 permissions
+- Public keys are stored with 644 permissions
+- WireGuard configs are stored with 600 permissions
+- All keys are generated per-interface for security isolation
