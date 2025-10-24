@@ -1,6 +1,16 @@
 tunnel_ip_subnet: 172.16.234.0
 tunnel_ip_range: 172.16.234
 tunnel_cidr: 24
+
+# VXLAN specific configuration
+vxlan_ip_subnet: 192.168.234.0
+vxlan_ip_range: 192.168.234
+vxlan_cidr: 24
+
+# ECMP configuration
+ecmp_check_interval: 2
+ecmp_script_path: /usr/local/bin/ecmp-watcher.sh
+
 wireguard_port: 51820
 wireguard_private_key_path: /etc/wireguard/private_key
 wireguard_public_key_path: /etc/wireguard/public_key

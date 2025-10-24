@@ -1,0 +1,185 @@
+#!/bin/bash
+
+CHECK_INTERVAL="{{ ecmp_check_interval | default(2) }}"
+
+{% raw %}
+log() {
+    echo "[$(date '+%F %T')] $*"
+}
+
+# Function to detect VXLAN interfaces from netplan configuration
+detect_vxlan_interfaces() {
+    local vxlan_interfaces=()
+    local vxlan_subnet=""
+
+    # Check if netplan directory exists
+    if [[ ! -d /etc/netplan ]]; then
+        log "No netplan directory found, no VXLAN interfaces detected"
+        return 1
+    fi
+
+    # Find all netplan files that might contain VXLAN configuration
+    for netplan_file in /etc/netplan/*.yaml; do
+        if [[ -f "$netplan_file" ]]; then
+            # Check if file contains VXLAN configuration
+            if grep -q "mode: vxlan" "$netplan_file" 2>/dev/null; then
+                log "Found VXLAN configuration in: $netplan_file"
+
+                # Extract VXLAN interface names and addresses
+                while IFS= read -r line; do
+                    if [[ "$line" =~ ^[[:space:]]*([a-zA-Z0-9_-]+):[[:space:]]*$ ]]; then
+                        interface_name="${BASH_REMATCH[1]}"
+                        # Check if this is a VXLAN interface by looking for mode: vxlan in the next few lines
+                        if sed -n "/^[[:space:]]*${interface_name}:/,/^[[:space:]]*[a-zA-Z]/p" "$netplan_file" | grep -q "mode: vxlan"; then
+                            vxlan_interfaces+=("$interface_name")
+                            log "Detected VXLAN interface: $interface_name"
+                        fi
+                    fi
+                done < "$netplan_file"
+
+                # Extract subnet from addresses
+                while IFS= read -r line; do
+                    if [[ "$line" =~ addresses:[[:space:]]*$ ]]; then
+                        # Look for IP address in the next line
+                        next_line=$(sed -n "$(( $(grep -n "addresses:" "$netplan_file" | head -1 | cut -d: -f1) + 1 ))p" "$netplan_file")
+                        if [[ "$next_line" =~ -[[:space:]]*\"([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/([0-9]+)\" ]]; then
+                            ip="${BASH_REMATCH[1]}"
+                            cidr="${BASH_REMATCH[2]}"
+                            # Calculate subnet
+                            IFS='.' read -r i1 i2 i3 i4 <<< "$ip"
+                            if [[ "$cidr" == "24" ]]; then
+                                vxlan_subnet="${i1}.${i2}.${i3}.0/24"
+                            elif [[ "$cidr" == "16" ]]; then
+                                vxlan_subnet="${i1}.${i2}.0.0/16"
+                            elif [[ "$cidr" == "8" ]]; then
+                                vxlan_subnet="${i1}.0.0.0/8"
+                            fi
+                            log "Detected VXLAN subnet: $vxlan_subnet"
+                            break
+                        fi
+                    fi
+                done < "$netplan_file"
+            fi
+        fi
+    done
+
+    # Return results via global variables
+    VXLAN_INTERFACES=("${vxlan_interfaces[@]}")
+    VXLAN_SUBNET="$vxlan_subnet"
+
+    if [[ ${#vxlan_interfaces[@]} -eq 0 ]]; then
+        log "No VXLAN interfaces found in netplan configuration"
+        return 1
+    fi
+
+    log "Found ${#vxlan_interfaces[@]} VXLAN interface(s): ${vxlan_interfaces[*]}"
+    return 0
+}
+
+# Function to check interface state
+check_interface_state() {
+    local interface="$1"
+    cat /sys/class/net/"$interface"/operstate 2>/dev/null || echo "down"
+}
+
+# Function to get up interfaces
+get_up_interfaces() {
+    local up_interfaces=()
+    for interface in "${VXLAN_INTERFACES[@]}"; do
+        state=$(check_interface_state "$interface")
+        if [[ "$state" =~ (up|unknown) ]]; then
+            up_interfaces+=("$interface")
+        fi
+    done
+    echo "${up_interfaces[@]}"
+}
+
+# Function to remove existing kernel routes
+remove_kernel_routes() {
+    for interface in "${VXLAN_INTERFACES[@]}"; do
+        existing=$(ip route show "$VXLAN_SUBNET" dev "$interface" 2>/dev/null)
+        if [[ -n "$existing" && "$existing" =~ proto\ kernel ]]; then
+            ip route del "$VXLAN_SUBNET" dev "$interface"
+            log "Deleted kernel route: $VXLAN_SUBNET via $interface"
+        fi
+    done
+}
+
+# Function to apply ECMP routing
+apply_ecmp_routing() {
+    local up_interfaces=("$@")
+
+    if [[ ${#up_interfaces[@]} -eq 0 ]]; then
+        log "No VXLAN interfaces up, skipping routing"
+        return
+    fi
+
+    if [[ ${#up_interfaces[@]} -eq 1 ]]; then
+        # Single interface - use kernel scope route
+        local interface="${up_interfaces[0]}"
+        current=$(ip route show "$VXLAN_SUBNET" dev "$interface" 2>/dev/null)
+        if [[ -z "$current" ]]; then
+            ip route add "$VXLAN_SUBNET" dev "$interface" scope link
+            log "Added kernel scope route: $VXLAN_SUBNET via $interface"
+        else
+            log "Kernel scope route already exists: $VXLAN_SUBNET via $interface"
+        fi
+    else
+        # Multiple interfaces - use ECMP
+        local route_cmd="ip route replace $VXLAN_SUBNET"
+        for interface in "${up_interfaces[@]}"; do
+            route_cmd+=" nexthop dev $interface weight 1"
+        done
+
+        # Check if current route matches what we want to set
+        current=$(ip route show "$VXLAN_SUBNET")
+        local route_matches=true
+        for interface in "${up_interfaces[@]}"; do
+            if [[ "$current" != *"$interface"* ]]; then
+                route_matches=false
+                break
+            fi
+        done
+
+        if [[ "$route_matches" == true && ${#up_interfaces[@]} -eq $(echo "$current" | grep -o "nexthop" | wc -l) ]]; then
+            log "ECMP route already correct, skipping"
+        else
+            eval "$route_cmd"
+            log "ECMP route applied: $VXLAN_SUBNET via ${up_interfaces[*]}"
+        fi
+    fi
+}
+
+# Main loop
+log "Starting VXLAN ECMP watcher"
+
+# Initial detection of VXLAN interfaces
+if ! detect_vxlan_interfaces; then
+    log "No VXLAN interfaces detected, exiting"
+    exit 1
+fi
+
+log "Monitoring VXLAN interfaces: ${VXLAN_INTERFACES[*]}"
+log "VXLAN subnet: $VXLAN_SUBNET"
+
+while true; do
+    # Re-detect interfaces periodically in case configuration changes
+    if ! detect_vxlan_interfaces; then
+        log "VXLAN interfaces no longer detected, continuing to monitor..."
+        sleep $CHECK_INTERVAL
+        continue
+    fi
+
+    # Get current interface states
+    up_interfaces=($(get_up_interfaces))
+    log "Checking interfaces: ${VXLAN_INTERFACES[*]} - Up: ${up_interfaces[*]}"
+
+    # Remove existing kernel routes
+    remove_kernel_routes
+
+    # Apply appropriate routing
+    apply_ecmp_routing "${up_interfaces[@]}"
+
+    sleep $CHECK_INTERVAL
+done
+{% endraw %}

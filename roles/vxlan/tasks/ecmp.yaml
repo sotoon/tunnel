@@ -1,0 +1,38 @@
+- name: Create ECMP watcher script
+  become: true
+  template:
+    src: ecmp-watcher.sh.j2
+    dest: "{{ ecmp_script_path }}"
+    mode: "0755"
+    owner: root
+    group: root
+  tags: ecmp
+
+- name: Set ECMP script permissions
+  become: true
+  file:
+    path: "{{ ecmp_script_path }}"
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Create ECMP watcher systemd service
+  become: true
+  template:
+    src: ecmp-watcher.service.j2
+    dest: /etc/systemd/system/ecmp-watcher.service
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Reload systemd daemon
+  become: true
+  systemd:
+    daemon_reload: true
+
+- name: Enable and start ECMP watcher service
+  become: true
+  systemd:
+    name: ecmp-watcher
+    enabled: true
+    state: started

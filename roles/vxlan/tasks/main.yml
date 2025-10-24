@@ -1,0 +1,5 @@
+- name: VXLAN facts
+  include_tasks: facts.yaml
+
+- name: Setup VXLAN
+  include_tasks: vxlan.yaml

@@ -1,0 +1,11 @@
+- name: Determine VXLAN group
+  set_fact:
+    vxlan_group: "{{ group_names | select('match', 'vxlan.*') | list | first }}"
+
+- name: Find peer host in VXLAN group
+  set_fact:
+    peer_host: "{{ groups[vxlan_group] | difference([inventory_hostname]) | first }}"
+
+- name: Set peer type
+  set_fact:
+    peer_type: "{{ hostvars[peer_host]['tunnel_type'] }}"

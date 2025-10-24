@@ -13,10 +13,25 @@
 #   roles:
 #     - role: gre
 #     - role: bird
-- hosts: wireguard1
-  gather_facts: true
-  roles:
-    - role: wireguard
+# - hosts: vxlan1
+#   gather_facts: true
+#   roles:
+#     - role: vxlan
+#     - role: bird
+# - hosts: vxlan2
+#   gather_facts: true
+#   roles:
+#     - role: vxlan
+#     - role: bird
+# - hosts: vxlan3
+#   gather_facts: true
+#   roles:
+#     - role: vxlan
+#     - role: bird
+# - hosts: wireguard1
+#   gather_facts: true
+#   roles:
+#     - role: wireguard
 # - hosts: wireguard2
 #   gather_facts: true
 #   roles:
@@ -29,3 +44,8 @@
 #   gather_facts: true
 #   roles:
 #     - role: calico
+
+- hosts: vxlan1
+  gather_facts: true
+  roles:
+    - role: vxlan

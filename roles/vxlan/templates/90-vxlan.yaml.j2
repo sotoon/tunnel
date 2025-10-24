@@ -1,0 +1,12 @@
+network:
+  version: 2
+  tunnels:
+    {{ vxlan_interface_name }}:
+      mode: vxlan
+      local: "{{ local_ip }}"
+      remote: "{{ remote_ip }}"
+      id: {{ vxlan_id }}
+      port: {{ vxlan_port }}
+      ttl: 255
+      addresses:
+        - "{{ tunnel_address }}"

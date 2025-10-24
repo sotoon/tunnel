@@ -1,0 +1,15 @@
+all:
+  hosts:
+    machine1:
+      ansible_host: 192.168.1.10
+      tunnel_type: src
+      public_ip: 87.247.187.238
+    engine1:
+      ansible_host: 10.0.0.5
+      tunnel_type: dest
+      public_ip: 87.247.168.200
+  children:
+    vxlan1:
+      hosts:
+        machine1:
+        engine1:

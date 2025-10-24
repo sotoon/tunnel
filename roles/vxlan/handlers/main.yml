@@ -1,0 +1,3 @@
+- name: restart networking
+  become: true
+  command: netplan apply
