@@ -1,6 +1,8 @@
 #!/bin/bash
 
 CHECK_INTERVAL="{{ ecmp_check_interval | default(2) }}"
+# Always use auto-detection regardless of tunnel_type variable
+TUNNEL_TYPE="auto"
 
 {% raw %}
 log() {
@@ -76,14 +78,71 @@ detect_vxlan_interfaces() {
     return 0
 }
 
+# Function to detect WireGuard interfaces from configuration files
+detect_wireguard_interfaces() {
+    local wg_interfaces=()
+    local wg_subnet=""
+
+    # Check if wireguard directory exists
+    if [[ ! -d /etc/wireguard ]]; then
+        log "No wireguard directory found, no WireGuard interfaces detected"
+        return 1
+    fi
+
+    # Find all wireguard config files
+    for wg_config in /etc/wireguard/*.conf; do
+        if [[ -f "$wg_config" ]]; then
+            # Extract interface name from filename
+            interface_name=$(basename "$wg_config" .conf)
+
+            # Check if this is a valid wireguard config by looking for [Interface] section
+            if grep -q "\[Interface\]" "$wg_config" 2>/dev/null; then
+                wg_interfaces+=("$interface_name")
+                log "Detected WireGuard interface: $interface_name"
+
+                # Extract subnet from Address field if not already found
+                if [[ -z "$wg_subnet" ]]; then
+                    address_line=$(grep "^Address = " "$wg_config" | head -1)
+                    if [[ "$address_line" =~ Address\ =\ ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/([0-9]+) ]]; then
+                        ip="${BASH_REMATCH[1]}"
+                        cidr="${BASH_REMATCH[2]}"
+                        # Calculate subnet
+                        IFS='.' read -r i1 i2 i3 i4 <<< "$ip"
+                        if [[ "$cidr" == "24" ]]; then
+                            wg_subnet="${i1}.${i2}.${i3}.0/24"
+                        elif [[ "$cidr" == "16" ]]; then
+                            wg_subnet="${i1}.${i2}.0.0/16"
+                        elif [[ "$cidr" == "8" ]]; then
+                            wg_subnet="${i1}.0.0.0/8"
+                        fi
+                        log "Detected WireGuard subnet: $wg_subnet"
+                    fi
+                fi
+            fi
+        fi
+    done
+
+    # Return results via global variables
+    WG_INTERFACES=("${wg_interfaces[@]}")
+    WG_SUBNET="$wg_subnet"
+
+    if [[ ${#wg_interfaces[@]} -eq 0 ]]; then
+        log "No WireGuard interfaces found in configuration"
+        return 1
+    fi
+
+    log "Found ${#wg_interfaces[@]} WireGuard interface(s): ${wg_interfaces[*]}"
+    return 0
+}
+
 # Function to check interface state
 check_interface_state() {
     local interface="$1"
     cat /sys/class/net/"$interface"/operstate 2>/dev/null || echo "down"
 }
 
-# Function to get up interfaces
-get_up_interfaces() {
+# Function to get up interfaces for VXLAN
+get_up_vxlan_interfaces() {
     local up_interfaces=()
     for interface in "${VXLAN_INTERFACES[@]}"; do
         state=$(check_interface_state "$interface")
@@ -94,19 +153,42 @@ get_up_interfaces() {
     echo "${up_interfaces[@]}"
 }
 
-# Function to remove existing kernel routes
-remove_kernel_routes() {
+# Function to get up interfaces for WireGuard
+get_up_wireguard_interfaces() {
+    local up_interfaces=()
+    for interface in "${WG_INTERFACES[@]}"; do
+        state=$(check_interface_state "$interface")
+        if [[ "$state" =~ (up|unknown) ]]; then
+            up_interfaces+=("$interface")
+        fi
+    done
+    echo "${up_interfaces[@]}"
+}
+
+# Function to remove existing kernel routes for VXLAN
+remove_vxlan_kernel_routes() {
     for interface in "${VXLAN_INTERFACES[@]}"; do
         existing=$(ip route show "$VXLAN_SUBNET" dev "$interface" 2>/dev/null)
         if [[ -n "$existing" && "$existing" =~ proto\ kernel ]]; then
             ip route del "$VXLAN_SUBNET" dev "$interface"
-            log "Deleted kernel route: $VXLAN_SUBNET via $interface"
+            log "Deleted VXLAN kernel route: $VXLAN_SUBNET via $interface"
         fi
     done
 }
 
-# Function to apply ECMP routing
-apply_ecmp_routing() {
+# Function to remove existing kernel routes for WireGuard
+remove_wireguard_kernel_routes() {
+    for interface in "${WG_INTERFACES[@]}"; do
+        existing=$(ip route show "$WG_SUBNET" dev "$interface" 2>/dev/null)
+        if [[ -n "$existing" && "$existing" =~ proto\ kernel ]]; then
+            ip route del "$WG_SUBNET" dev "$interface"
+            log "Deleted WireGuard kernel route: $WG_SUBNET via $interface"
+        fi
+    done
+}
+
+# Function to apply ECMP routing for VXLAN
+apply_vxlan_ecmp_routing() {
     local up_interfaces=("$@")
 
     if [[ ${#up_interfaces[@]} -eq 0 ]]; then
@@ -120,9 +202,9 @@ apply_ecmp_routing() {
         current=$(ip route show "$VXLAN_SUBNET" dev "$interface" 2>/dev/null)
         if [[ -z "$current" ]]; then
             ip route add "$VXLAN_SUBNET" dev "$interface" scope link
-            log "Added kernel scope route: $VXLAN_SUBNET via $interface"
+            log "Added VXLAN kernel scope route: $VXLAN_SUBNET via $interface"
         else
-            log "Kernel scope route already exists: $VXLAN_SUBNET via $interface"
+            log "VXLAN kernel scope route already exists: $VXLAN_SUBNET via $interface"
         fi
     else
         # Multiple interfaces - use ECMP
@@ -142,43 +224,127 @@ apply_ecmp_routing() {
         done
 
         if [[ "$route_matches" == true && ${#up_interfaces[@]} -eq $(echo "$current" | grep -o "nexthop" | wc -l) ]]; then
-            log "ECMP route already correct, skipping"
+            log "VXLAN ECMP route already correct, skipping"
         else
             eval "$route_cmd"
-            log "ECMP route applied: $VXLAN_SUBNET via ${up_interfaces[*]}"
+            log "VXLAN ECMP route applied: $VXLAN_SUBNET via ${up_interfaces[*]}"
+        fi
+    fi
+}
+
+# Function to apply ECMP routing for WireGuard
+apply_wireguard_ecmp_routing() {
+    local up_interfaces=("$@")
+
+    if [[ ${#up_interfaces[@]} -eq 0 ]]; then
+        log "No WireGuard interfaces up, skipping routing"
+        return
+    fi
+
+    if [[ ${#up_interfaces[@]} -eq 1 ]]; then
+        # Single interface - use kernel scope route
+        local interface="${up_interfaces[0]}"
+        current=$(ip route show "$WG_SUBNET" dev "$interface" 2>/dev/null)
+        if [[ -z "$current" ]]; then
+            ip route add "$WG_SUBNET" dev "$interface" scope link
+            log "Added WireGuard kernel scope route: $WG_SUBNET via $interface"
+        else
+            log "WireGuard kernel scope route already exists: $WG_SUBNET via $interface"
+        fi
+    else
+        # Multiple interfaces - use ECMP
+        local route_cmd="ip route replace $WG_SUBNET"
+        for interface in "${up_interfaces[@]}"; do
+            route_cmd+=" nexthop dev $interface weight 1"
+        done
+
+        # Check if current route matches what we want to set
+        current=$(ip route show "$WG_SUBNET")
+        local route_matches=true
+        for interface in "${up_interfaces[@]}"; do
+            if [[ "$current" != *"$interface"* ]]; then
+                route_matches=false
+                break
+            fi
+        done
+
+        if [[ "$route_matches" == true && ${#up_interfaces[@]} -eq $(echo "$current" | grep -o "nexthop" | wc -l) ]]; then
+            log "WireGuard ECMP route already correct, skipping"
+        else
+            eval "$route_cmd"
+            log "WireGuard ECMP route applied: $WG_SUBNET via ${up_interfaces[*]}"
         fi
     fi
 }
 
 # Main loop
-log "Starting VXLAN ECMP watcher"
+log "Starting Tunnel ECMP watcher (Auto-detecting all tunnel types)"
 
-# Initial detection of VXLAN interfaces
-if ! detect_vxlan_interfaces; then
-    log "No VXLAN interfaces detected, exiting"
+# Detect both VXLAN and WireGuard interfaces
+vxlan_detected=false
+wireguard_detected=false
+
+if detect_vxlan_interfaces; then
+    vxlan_detected=true
+    log "Auto-detected VXLAN interfaces: ${VXLAN_INTERFACES[*]}"
+    log "VXLAN subnet: $VXLAN_SUBNET"
+fi
+
+if detect_wireguard_interfaces; then
+    wireguard_detected=true
+    log "Auto-detected WireGuard interfaces: ${WG_INTERFACES[*]}"
+    log "WireGuard subnet: $WG_SUBNET"
+fi
+
+if [[ "$vxlan_detected" == false && "$wireguard_detected" == false ]]; then
+    log "No tunnel interfaces detected, exiting"
     exit 1
 fi
 
-log "Monitoring VXLAN interfaces: ${VXLAN_INTERFACES[*]}"
-log "VXLAN subnet: $VXLAN_SUBNET"
-
 while true; do
-    # Re-detect interfaces periodically in case configuration changes
-    if ! detect_vxlan_interfaces; then
-        log "VXLAN interfaces no longer detected, continuing to monitor..."
-        sleep $CHECK_INTERVAL
-        continue
+    # Handle VXLAN interfaces if detected
+    if [[ "$vxlan_detected" == true ]]; then
+        # Re-detect VXLAN interfaces periodically
+        if ! detect_vxlan_interfaces; then
+            log "VXLAN interfaces no longer detected, continuing to monitor..."
+            vxlan_detected=false
+        else
+            # Get current VXLAN interface states
+            up_interfaces=($(get_up_vxlan_interfaces))
+            log "Checking VXLAN interfaces: ${VXLAN_INTERFACES[*]} - Up: ${up_interfaces[*]}"
+
+            # Remove existing kernel routes
+            remove_vxlan_kernel_routes
+
+            # Apply appropriate routing
+            apply_vxlan_ecmp_routing "${up_interfaces[@]}"
+        fi
     fi
 
-    # Get current interface states
-    up_interfaces=($(get_up_interfaces))
-    log "Checking interfaces: ${VXLAN_INTERFACES[*]} - Up: ${up_interfaces[*]}"
+    # Handle WireGuard interfaces if detected
+    if [[ "$wireguard_detected" == true ]]; then
+        # Re-detect WireGuard interfaces periodically
+        if ! detect_wireguard_interfaces; then
+            log "WireGuard interfaces no longer detected, continuing to monitor..."
+            wireguard_detected=false
+        else
+            # Get current WireGuard interface states
+            up_interfaces=($(get_up_wireguard_interfaces))
+            log "Checking WireGuard interfaces: ${WG_INTERFACES[*]} - Up: ${up_interfaces[*]}"
 
-    # Remove existing kernel routes
-    remove_kernel_routes
+            # Remove existing kernel routes
+            remove_wireguard_kernel_routes
 
-    # Apply appropriate routing
-    apply_ecmp_routing "${up_interfaces[@]}"
+            # Apply appropriate routing
+            apply_wireguard_ecmp_routing "${up_interfaces[@]}"
+        fi
+    fi
+
+    # Check if we should exit (no more tunnel interfaces)
+    if [[ "$vxlan_detected" == false && "$wireguard_detected" == false ]]; then
+        log "No tunnel interfaces remaining, exiting"
+        exit 0
+    fi
 
     sleep $CHECK_INTERVAL
 done
