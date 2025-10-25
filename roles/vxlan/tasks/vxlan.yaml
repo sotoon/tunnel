@@ -47,6 +47,7 @@
     local_ip: "{{ physical_interfaces[0].ip.split('/')[0] }}"
     interface_name: "eth0"
     vxlan_interface_name: "vxlan-eth0"
+    interface_index: 0
   when: tunnel_type == "src" and physical_interfaces is defined
 
 - name: Setup VXLAN config for eth1 (machine to engine)
@@ -65,6 +66,7 @@
     local_ip: "{{ physical_interfaces[1].ip.split('/')[0] }}"
     interface_name: "eth1"
     vxlan_interface_name: "vxlan-eth1"
+    interface_index: 1
   when: tunnel_type == "src" and physical_interfaces is defined and physical_interfaces|length > 1
 
 - name: Setup VXLAN config for engine (engine to machine eth0)
@@ -83,6 +85,7 @@
     local_ip: "{{ physical_interfaces[0].ip.split('/')[0] }}"
     interface_name: "ens3"
     vxlan_interface_name: "vxlan-eth0"
+    interface_index: 0
   when: tunnel_type == "dest" and physical_interfaces is defined
 
 - name: Setup VXLAN config for engine (engine to machine eth1)
@@ -101,6 +104,7 @@
     local_ip: "{{ physical_interfaces[0].ip.split('/')[0] }}"
     interface_name: "ens3"
     vxlan_interface_name: "vxlan-eth1"
+    interface_index: 1
   when: tunnel_type == "dest" and physical_interfaces is defined
 
 - name: Start VXLAN
@@ -138,6 +142,4 @@
     jump: MASQUERADE
     state: present
   when: tunnel_type == "dest" and is_10_0_range
-
-- name: Setup ECMP watcher
-  include_tasks: ecmp.yaml
+# ECMP is now deployed at site level for all hosts

@@ -11,7 +11,7 @@
   template:
     src: bird.conf.j2
     dest: /etc/bird/bird.conf
-    mode: '0540'
+    mode: "0540"
   vars:
     tunnel_local_address: "{{ tunnel_local_address }}"
     local_ip: "{{ ansible_default_ipv4.address }}"
@@ -19,4 +19,5 @@
     dest_index: "{{ dest_index }}"
     index: "{{ index }}"
     tunnel_dest_address: "{{ tunnel_dest_address }}"
+    tunnel_interface_name: "{{ tunnel_interface_name }}"
   notify: Restart bird2

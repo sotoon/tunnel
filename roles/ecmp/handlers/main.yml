@@ -1,0 +1,14 @@
+---
+- name: restart ecmp-watcher
+  become: true
+  systemd:
+    name: ecmp-watcher
+    state: restarted
+    daemon_reload: true
+
+- name: reload ecmp-watcher
+  become: true
+  systemd:
+    name: ecmp-watcher
+    state: reloaded
+    daemon_reload: true

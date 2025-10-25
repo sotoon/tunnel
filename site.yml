@@ -40,6 +40,7 @@
 #   gather_facts: true
 #   roles:
 #     - role: wireguard
+
 # - hosts: localhost
 #   gather_facts: true
 #   roles:
@@ -48,4 +49,6 @@
 - hosts: vxlan1
   gather_facts: true
   roles:
-    - role: vxlan
+    # - role: vxlan
+    # - role: ecmp
+    - role: bird

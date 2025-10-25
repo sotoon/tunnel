@@ -307,3 +307,4 @@
     state: present
   when: tunnel_type == "dest" and is_10_0_range
   tags: wireguard
+# ECMP is now deployed at site level for all hosts

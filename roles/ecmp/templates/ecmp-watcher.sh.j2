@@ -1,7 +1,6 @@
 #!/bin/bash
 
 CHECK_INTERVAL="{{ ecmp_check_interval | default(2) }}"
-# Always use auto-detection regardless of tunnel_type variable
 TUNNEL_TYPE="auto"
 
 {% raw %}

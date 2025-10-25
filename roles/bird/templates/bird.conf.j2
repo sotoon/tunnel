@@ -1,8 +1,8 @@
 router id {{ tunnel_local_address }};
 log syslog all;
 
-{% set gre_group = groups | dict2items | selectattr('key', 'match', '^(gre|wireguard).*') | selectattr('value', 'contains', inventory_hostname) | map(attribute='key') | first %}
-{% set group_num = gre_group | regex_replace('^(gre|wireguard)', '') | int %}
+{% set tunnel_group = groups | dict2items | selectattr('key', 'match', '^(gre|wireguard|vxlan).*') | selectattr('value', 'contains', inventory_hostname) | map(attribute='key') | first %}
+{% set group_num = tunnel_group | regex_replace('^(gre|wireguard|vxlan)', '') | int %}
 {% set as_prefix = '60' ~ group_num ~ '0' %}  {# Changed 1 to 0 here #}
 {% if 'KUBE_WORKERS_1' in vars and inventory_hostname in KUBE_WORKERS_1 %}
     {% set workers_index = 1 %}
@@ -35,8 +35,8 @@ filter nexthops {
 protocol static {
     ipv4;
     route {{ local_subnet }} via "{{ interface }}";
-    route {{ tunnel_ip_range }}.{{ (group_num * 2) - 1 }}/32 via "{{ tunnel_interface_name }}";
-    route {{ tunnel_ip_range }}.{{ (group_num * 2) }}/32 via "{{ tunnel_interface_name }}";
+    route {{ tunnel_ip_range }}.{{ (group_num * 2) - 1 }}/32 via "{{ tunnel_interface_name | default('gre') }}";
+    route {{ tunnel_ip_range }}.{{ (group_num * 2) }}/32 via "{{ tunnel_interface_name | default('gre') }}";
 }
 
 protocol bgp bgp_to_node{{ dest_index }} {
