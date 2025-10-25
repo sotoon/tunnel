@@ -32,13 +32,6 @@ filter nexthops {
   set_nexthops();
 }
 
-protocol static {
-    ipv4;
-    route {{ local_subnet }} via "{{ interface }}";
-    route {{ tunnel_ip_range }}.{{ (group_num * 2) - 1 }}/32 via "{{ tunnel_interface_name | default('gre') }}";
-    route {{ tunnel_ip_range }}.{{ (group_num * 2) }}/32 via "{{ tunnel_interface_name | default('gre') }}";
-}
-
 protocol bgp bgp_to_node{{ dest_index }} {
     local {{ tunnel_local_address }} as {{ as_prefix }}{{ index }};
     neighbor {{ tunnel_dest_address }} as {{ as_prefix }}{{ dest_index }};
@@ -54,6 +47,24 @@ protocol bgp bgp_to_node{{ dest_index }} {
     connect retry time 5;
     error wait time 5,30;
 }
+
+{% if has_vxlan_dual|default(false) %}
+protocol bgp bgp_to_node{{ dest_index }}_2 {
+    local {{ tunnel_local_address_2 }} as {{ as_prefix }}{{ index }};
+    neighbor {{ tunnel_dest_address_2 }} as {{ as_prefix }}{{ dest_index }};
+    ipv4 {
+        export filter nexthops;
+        import all;
+        next hop self;
+    };
+    direct;
+    hold time 240;
+    keepalive time 80;
+    connect delay time 2;
+    connect retry time 5;
+    error wait time 5,30;
+}
+{% endif %}
 
 
 {% set worker_list = vars['KUBE_WORKERS_' ~ workers_index] %}

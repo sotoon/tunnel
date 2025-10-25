@@ -21,6 +21,7 @@
 - name: Determine tunnel interface name
   set_fact:
     tunnel_interface_name: "{{ 'vxlan-eth0' if tunnel_group is match('^vxlan.*') else ('wg0' if tunnel_group is match('^wireguard.*') else 'gre') }}"
+    has_vxlan_dual: "{{ tunnel_group is match('^vxlan.*') and ('vxlan_interface_2' in hostvars[inventory_hostname]) }}"
 
 - name: Determine peer_type
   set_fact:
@@ -36,8 +37,11 @@
 - name: Set derived tunnel and BGP variables
   set_fact:
     dest_index: "{{ (groups['all'] | list).index(peer_host) + 1 }}"
-    tunnel_local_address: "{{ tunnel_ip_range }}.{{ index }}"
+    actual_tunnel_ip_range: "{{ vxlan_ip_range if tunnel_group is match('^vxlan.*') else tunnel_ip_range }}"
+    tunnel_local_address: "{{ vxlan_ip_range if tunnel_group is match('^vxlan.*') else tunnel_ip_range }}.{{ index }}"
+    tunnel_local_address_2: "{{ vxlan_ip_range if (tunnel_group is match('^vxlan.*') and has_vxlan_dual) else '' }}.{{ index + 100 if has_vxlan_dual else '' }}"
 
 - name: Set derived tunnel and BGP variables
   set_fact:
-    tunnel_dest_address: "{{ tunnel_ip_range }}.{{ dest_index }}"
+    tunnel_dest_address: "{{ vxlan_ip_range if tunnel_group is match('^vxlan.*') else tunnel_ip_range }}.{{ dest_index }}"
+    tunnel_dest_address_2: "{{ vxlan_ip_range if (tunnel_group is match('^vxlan.*') and has_vxlan_dual) else '' }}.{{ dest_index + 100 if has_vxlan_dual else '' }}"

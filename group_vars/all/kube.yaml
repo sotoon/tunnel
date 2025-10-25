@@ -1,9 +1,11 @@
 KUBECONFIG_1: /Users/USER/kubeconfig1.yaml
 KUBECONFIG_2: /Users/USER/kubeconfig2.yaml
 KUBE_WORKERS_1:
-  - 10.0.0.243
-  - 10.0.0.183
+  []
+  # - 10.0.0.243
+  # - 10.0.0.183
 KUBE_WORKERS_2:
-  - 10.0.10.27
-  - 10.0.10.200
-  - 10.0.10.136
+  []
+  # - 10.0.10.27
+  # - 10.0.10.200
+  # - 10.0.10.136
