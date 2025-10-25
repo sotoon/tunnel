@@ -52,3 +52,8 @@
     # - role: vxlan
     # - role: ecmp
     - role: bird
+
+- hosts: clients
+  gather_facts: true
+  roles:
+    - role: bird

@@ -2,12 +2,12 @@
   set_fact:
     tunnel_group: >-
       {{
-        groups
+        (groups
         | dict2items
         | selectattr('key', 'match', '^(gre|wireguard|vxlan).*')
         | selectattr('value', 'contains', inventory_hostname)
         | map(attribute='key')
-        | first
+        | first) | default('vxlan1')
       }}
     tunnel_type_name: >-
       {{
@@ -15,6 +15,7 @@
         | regex_replace('^(gre|wireguard|vxlan)([0-9]+)?.*', '\\1')
         | default('gre')
       }}
+    is_client: "{{ tunnel_type == 'client' }}"
     local_subnet: "{{ ansible_default_ipv4.network + '/' + (ansible_default_ipv4.prefix | string) }}"
     interface: "{{ ansible_default_ipv4.interface }}"
 
@@ -26,22 +27,68 @@
 - name: Determine peer_type
   set_fact:
     peer_type: "{{ 'dest' if tunnel_type == 'src' else 'src' }}"
+  when: not is_client | default(false)
+
+- name: Set client peer to tunnel endpoint
+  set_fact:
+    peer_host: "{{ gateway_peer | default(groups['vxlan1'][0]) }}"
+    index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
+  when: is_client | default(false)
+
+- name: Gather facts for peer host
+  block:
+    - ansible.builtin.setup:
+      delegate_to: "{{ peer_host }}"
+      delegate_facts: true
+  rescue:
+    - debug:
+        msg: "Skipping fact gathering for peer host"
+  when: is_client | default(false)
 
 - name: Determine tunnel peer manually
   set_fact:
     peer_host: "{{ item }}"
     index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
-  when: hostvars[item]['tunnel_type'] == peer_type
+  when: not is_client | default(false) and hostvars[item]['tunnel_type'] == peer_type
   loop: "{{ groups[tunnel_group] | difference([inventory_hostname]) }}"
 
 - name: Set derived tunnel and BGP variables
   set_fact:
     dest_index: "{{ (groups['all'] | list).index(peer_host) + 1 }}"
     actual_tunnel_ip_range: "{{ vxlan_ip_range if tunnel_group is match('^vxlan.*') else tunnel_ip_range }}"
+  when: not is_client | default(false)
+
+- name: Set tunnel addresses for client
+  set_fact:
+    tunnel_local_address: "{{ ansible_default_ipv4.address }}"
+    tunnel_dest_address: "{{ hostvars[peer_host].ansible_default_ipv4.address }}"
+    tunnel_dest_address_2: "{{ hostvars[peer_host].physical_interfaces[1].ip.split('/')[0] if (hostvars[peer_host].physical_interfaces is defined and hostvars[peer_host].physical_interfaces|length > 1) else '' }}"
+    dest_index: "{{ (groups['all'] | list).index(peer_host) + 1 }}"
+    gateway_as: "{{ '61113' if hostvars[peer_host].tunnel_type == 'src' else '61213' }}"
+  when: is_client | default(false)
+
+- name: Set tunnel addresses for tunnel endpoints
+  set_fact:
     tunnel_local_address: "{{ vxlan_ip_range if tunnel_group is match('^vxlan.*') else tunnel_ip_range }}.{{ index }}"
     tunnel_local_address_2: "{{ vxlan_ip_range if (tunnel_group is match('^vxlan.*') and has_vxlan_dual) else '' }}.{{ index + 100 if has_vxlan_dual else '' }}"
+  when: not is_client | default(false)
 
-- name: Set derived tunnel and BGP variables
+- name: Set derived tunnel and BGP variables for endpoints
   set_fact:
     tunnel_dest_address: "{{ vxlan_ip_range if tunnel_group is match('^vxlan.*') else tunnel_ip_range }}.{{ dest_index }}"
     tunnel_dest_address_2: "{{ vxlan_ip_range if (tunnel_group is match('^vxlan.*') and has_vxlan_dual) else '' }}.{{ dest_index + 100 if has_vxlan_dual else '' }}"
+  when: not is_client | default(false)
+
+- name: Detect client machines for gateway BGP
+  set_fact:
+    client_hosts: "{{ groups['clients'] | default([]) }}"
+    has_clients: "{{ (groups['clients'] | default([]) | length) > 0 }}"
+    client_interface_1: "{{ physical_interfaces[0].ip.split('/')[0] if physical_interfaces is defined and physical_interfaces|length > 0 else '' }}"
+    client_interface_2: "{{ physical_interfaces[1].ip.split('/')[0] if physical_interfaces is defined and physical_interfaces|length > 1 else '' }}"
+  when: tunnel_type in ['src', 'dest'] and not is_client | default(false)
+
+- name: Get client IP addresses
+  set_fact:
+    client_ips: "{{ client_ips | default([]) + [hostvars[item].internal_ip] }}"
+  loop: "{{ groups['clients'] | default([]) }}"
+  when: has_clients | default(false)

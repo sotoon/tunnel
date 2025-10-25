@@ -12,15 +12,5 @@
     src: bird.conf.j2
     dest: /etc/bird/bird.conf
     mode: "0540"
-  vars:
-    tunnel_local_address: "{{ tunnel_local_address }}"
-    tunnel_local_address_2: "{{ tunnel_local_address_2 }}"
-    local_ip: "{{ ansible_default_ipv4.address }}"
-    local_subnet: "{{ local_subnet }}"
-    dest_index: "{{ dest_index }}"
-    index: "{{ index }}"
-    tunnel_dest_address: "{{ tunnel_dest_address }}"
-    tunnel_dest_address_2: "{{ tunnel_dest_address_2 }}"
-    tunnel_interface_name: "{{ tunnel_interface_name }}"
-    has_vxlan_dual: "{{ has_vxlan_dual }}"
+
   notify: Restart bird2

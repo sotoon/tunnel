@@ -1,7 +1,8 @@
 router id {{ tunnel_local_address }};
 log syslog all;
 
-{% set tunnel_group = groups | dict2items | selectattr('key', 'match', '^(gre|wireguard|vxlan).*') | selectattr('value', 'contains', inventory_hostname) | map(attribute='key') | first %}
+{% set tunnel_group = groups | dict2items | selectattr('key', 'match', '^(gre|wireguard|vxlan).*') | selectattr('value', 'contains', inventory_hostname) | map(attribute='key') | first | default('vxlan1') %}
+{% set is_client = tunnel_type == 'client' %}
 {% set group_num = tunnel_group | regex_replace('^(gre|wireguard|vxlan)', '') | int %}
 {% set as_prefix = '60' ~ group_num ~ '0' %}  {# Changed 1 to 0 here #}
 {% if 'KUBE_WORKERS_1' in vars and inventory_hostname in KUBE_WORKERS_1 %}
@@ -9,11 +10,16 @@ log syslog all;
 {% elif 'KUBE_WORKERS_2' in vars and inventory_hostname in KUBE_WORKERS_2 %}
     {% set workers_index = 2 %}
 {% else %}
-    {% set workers_index = 1 if tunnel_type == 'src' else 2 %}
+    {% set workers_index = 1 if tunnel_type == 'src' or tunnel_type == 'client' else 2 %}
 {% endif %}
 
-{% set local_as = '6' ~ group_num ~ workers_index ~ '13' %}
-{% set remote_as = '6' ~ workers_index ~ '012' %}
+{% if is_client %}
+    {% set local_as = '6' ~ group_num ~ '99' ~ '13' %}
+    {% set remote_as = '6' ~ group_num ~ '1' ~ '13' %}
+{% else %}
+    {% set local_as = '6' ~ group_num ~ workers_index ~ '13' %}
+    {% set remote_as = '6' ~ workers_index ~ '012' %}
+{% endif %}
 
 function set_nexthops()
 {
@@ -32,6 +38,41 @@ filter nexthops {
   set_nexthops();
 }
 
+{% if is_client %}
+protocol bgp bgp_to_gateway {
+    local {{ tunnel_local_address }} as {{ local_as }};
+    neighbor {{ tunnel_dest_address }} as {{ gateway_as }};
+    ipv4 {
+        export filter nexthops;
+        import all;
+        next hop self;
+    };
+    direct;
+    hold time 240;
+    keepalive time 80;
+    connect delay time 2;
+    connect retry time 5;
+    error wait time 5,30;
+}
+
+{% if tunnel_dest_address_2|default('') != '' %}
+protocol bgp bgp_to_gateway_2 {
+    local {{ tunnel_local_address }} as {{ local_as }};
+    neighbor {{ tunnel_dest_address_2 }} as {{ gateway_as }};
+    ipv4 {
+        export filter nexthops;
+        import all;
+        next hop self;
+    };
+    direct;
+    hold time 240;
+    keepalive time 80;
+    connect delay time 2;
+    connect retry time 5;
+    error wait time 5,30;
+}
+{% endif %}
+{% else %}
 protocol bgp bgp_to_node{{ dest_index }} {
     local {{ tunnel_local_address }} as {{ as_prefix }}{{ index }};
     neighbor {{ tunnel_dest_address }} as {{ as_prefix }}{{ dest_index }};
@@ -47,6 +88,7 @@ protocol bgp bgp_to_node{{ dest_index }} {
     connect retry time 5;
     error wait time 5,30;
 }
+{% endif %}
 
 {% if has_vxlan_dual|default(false) %}
 protocol bgp bgp_to_node{{ dest_index }}_2 {
@@ -66,6 +108,46 @@ protocol bgp bgp_to_node{{ dest_index }}_2 {
 }
 {% endif %}
 
+{% if has_clients|default(false) and not is_client %}
+{% for client_ip in client_ips %}
+protocol bgp bgp_from_client_{{ loop.index }} {
+    local {{ client_interface_1 }} as {{ local_as }};
+    neighbor {{ client_ip }} as 619913;
+    {% set client_remote_as = '619913' %}
+    ipv4 {
+        export filter nexthops;
+        import all;
+        next hop self;
+    };
+    passive;
+    hold time 240;
+    keepalive time 80;
+    connect delay time 2;
+    connect retry time 5;
+    error wait time 5,30;
+}
+{% endfor %}
+
+{% if client_interface_2|default('') != '' %}
+{% for client_ip in client_ips %}
+protocol bgp bgp_from_client_{{ loop.index }}_2 {
+    local {{ client_interface_2 }} as {{ local_as }};
+    neighbor {{ client_ip }} as 619913;
+    ipv4 {
+        export filter nexthops;
+        import all;
+        next hop self;
+    };
+    passive;
+    hold time 240;
+    keepalive time 80;
+    connect delay time 2;
+    connect retry time 5;
+    error wait time 5,30;
+}
+{% endfor %}
+{% endif %}
+{% endif %}
 
 {% set worker_list = vars['KUBE_WORKERS_' ~ workers_index] %}
 
