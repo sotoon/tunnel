@@ -1,0 +1,24 @@
+#!/bin/bash
+# Tunnel connectivity monitoring script
+# Generated for {{ metrics_host_type }} host
+
+HOST_TYPE="{{ metrics_host_type }}"
+TARGET_IPS=({% for ip in tunnel_ips[metrics_host_type] %}"{{ ip }}"{% if not loop.last %} {% endif %}{% endfor %})
+
+echo "Starting tunnel connectivity monitoring for $HOST_TYPE"
+echo "Target IPs: ${TARGET_IPS[*]}"
+
+while true; do
+    echo "$(date): Checking tunnel connectivity..."
+
+    for ip in "${TARGET_IPS[@]}"; do
+        if ping -c 1 -W 5 "$ip" > /dev/null 2>&1; then
+            echo "✓ $ip is reachable"
+        else
+            echo "✗ $ip is NOT reachable"
+        fi
+    done
+
+    echo "---"
+    sleep 30
+done

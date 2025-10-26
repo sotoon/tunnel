@@ -1,0 +1,7 @@
+#!/bin/bash
+# Test template
+PROBES=(
+{% for probe in dynamic_route_probes %}
+  "{{ probe.label }}|{{ probe.url }}|{{ probe.next_hop }}"
+{% endfor %}
+)

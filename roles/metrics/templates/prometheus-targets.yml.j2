@@ -1,0 +1,23 @@
+# Prometheus scrape configuration for tunnel monitoring
+# This file should be included in your main Prometheus configuration
+
+- job_name: 'tunnel-connectivity-{{ metrics_host_type }}'
+  metrics_path: /probe
+  params:
+    module: [icmp]
+  static_configs:
+    - targets:
+{% for ip in tunnel_ips[metrics_host_type] %}
+        - {{ ip }}
+{% endfor %}
+  relabel_configs:
+    - source_labels: [__address__]
+      target_label: __param_target
+    - source_labels: [__param_target]
+      target_label: instance
+    - target_label: __address__
+      replacement: localhost:9115
+    - source_labels: [__param_target]
+      target_label: tunnel_ip
+    - target_label: host_type
+      replacement: {{ metrics_host_type }}

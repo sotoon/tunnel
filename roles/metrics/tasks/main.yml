@@ -1,0 +1,5 @@
+- name: Metrics facts
+  include_tasks: facts.yaml
+
+- name: Setup blackbox monitoring
+  include_tasks: blackbox.yaml

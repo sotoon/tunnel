@@ -40,3 +40,28 @@ interface_base_ranges:
   eth3:
     machine_range: 10.4.0.0/24
     engine_range: 10.14.0.0/24
+
+# Dynamic route configuration - conditional based on host type
+# Machine side configuration (for hosts starting with "machine")
+machine_dynamic_route_target: "10.10.0.0/24"
+machine_dynamic_route_interface: "eth0"
+machine_dynamic_route_curl_timeout: 2
+machine_dynamic_route_probes:
+  - label: "target-1"
+    url: "http://10.0.0.61:9115/probe?target=192.168.234.2&module=icmp"
+    next_hop: "10.0.0.61"
+  - label: "target-2"
+    url: "http://10.0.0.49:9115/probe?target=192.168.234.4&module=icmp"
+    next_hop: "10.0.0.49"
+
+# Engine side configuration (for hosts starting with "engine")
+engine_dynamic_route_target: "10.0.0.0/24"
+engine_dynamic_route_interface: "ens3"
+engine_dynamic_route_curl_timeout: 2
+engine_dynamic_route_probes:
+  - label: "target-1"
+    url: "http://10.10.0.25:9115/probe?target=192.168.234.2&module=icmp"
+    next_hop: "10.10.0.25"
+  - label: "target-2"
+    url: "http://10.10.0.112:9115/probe?target=192.168.234.4&module=icmp"
+    next_hop: "10.10.0.112"

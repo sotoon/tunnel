@@ -1,0 +1,11 @@
+[Unit]
+Description=Dynamic Route Monitor Timer
+Requires=dynamic-route.service
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=5s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

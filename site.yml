@@ -46,14 +46,57 @@
 #   roles:
 #     - role: calico
 
+# - hosts: vxlan1
+#   gather_facts: true
+#   roles:
+#     - role: vxlan
+# - role: ecmp
+# - role: bird
+# - hosts: clients
+#   gather_facts: true
+#   roles:
+#     - role: bird
+
+# - hosts: vxlan2
+#   gather_facts: true
+#   roles:
+#     - role: vxlan
+
+# - hosts: machine1
+#   gather_facts: true
+#   become: yes
+#   roles:
+#     - role: metrics
+
+# - hosts: machine2
+#   gather_facts: true
+#   become: yes
+#   roles:
+#     - role: metrics
+
+# - hosts: engine1
+#   gather_facts: true
+#   become: yes
+#   roles:
+#     - role: metrics
+
 - hosts: vxlan1
   gather_facts: true
+  become: yes
   roles:
     # - role: vxlan
-    # - role: ecmp
-    - role: bird
+    - role: metrics
 
+- hosts: vxlan2
+  gather_facts: true
+  become: yes
+  roles:
+    # - role: vxlan
+    - role: metrics
+
+# Dynamic route monitoring for clients
 - hosts: clients
   gather_facts: true
+  become: yes
   roles:
-    - role: bird
+    - role: dynamic-route

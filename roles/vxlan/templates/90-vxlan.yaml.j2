@@ -8,5 +8,10 @@ network:
       id: {{ vxlan_id }}
       port: {{ vxlan_port }}
       ttl: 255
+      mtu: 1450
       addresses:
         - "{{ tunnel_address }}"
+      routes:
+        - to: "{{ remote_network_range }}"
+          via: "{{ remote_tunnel_ip }}"
+          mtu: 1450

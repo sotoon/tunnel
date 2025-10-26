@@ -48,26 +48,30 @@
     interface_name: "eth0"
     vxlan_interface_name: "vxlan-eth0"
     interface_index: 0
+    remote_network_range: "{{ interface_base_ranges['eth0'][tunnel_type == 'src' and 'engine_range' or 'machine_range'] }}"
+    remote_tunnel_ip: "{{ vxlan_ip_range }}.{{ (groups['all'] | list).index(peer_host) + 1 }}"
   when: tunnel_type == "src" and physical_interfaces is defined
 
-- name: Setup VXLAN config for eth1 (machine to engine)
-  become: true
-  become_user: root
-  template:
-    src: 90-vxlan.yaml.j2
-    dest: /etc/netplan/90-vxlan-eth1.yaml
-    mode: "0400"
-  vars:
-    remote_ip: "{{ hostvars[peer_host]['public_ip'] }}"
-    index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
-    tunnel_address: "{{ vxlan_ip_range }}.{{ index + 100 }}/{{ vxlan_cidr }}"
-    vxlan_id: 201
-    vxlan_port: 4790
-    local_ip: "{{ physical_interfaces[1].ip.split('/')[0] }}"
-    interface_name: "eth1"
-    vxlan_interface_name: "vxlan-eth1"
-    interface_index: 1
-  when: tunnel_type == "src" and physical_interfaces is defined and physical_interfaces|length > 1
+# - name: Setup VXLAN config for eth1 (machine to engine)
+#   become: true
+#   become_user: root
+#   template:
+#     src: 90-vxlan.yaml.j2
+#     dest: /etc/netplan/90-vxlan-eth1.yaml
+#     mode: "0400"
+#   vars:
+#     remote_ip: "{{ hostvars[peer_host]['public_ip'] }}"
+#     index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
+#     tunnel_address: "{{ vxlan_ip_range }}.{{ index + 100 }}/{{ vxlan_cidr }}"
+#     vxlan_id: 201
+#     vxlan_port: 4790
+#     local_ip: "{{ physical_interfaces[1].ip.split('/')[0] }}"
+#     interface_name: "eth1"
+#     vxlan_interface_name: "vxlan-eth1"
+#     interface_index: 1
+#     remote_network_range: "{{ interface_base_ranges['eth1'][tunnel_type == 'src' and 'engine_range' or 'machine_range'] }}"
+#     remote_tunnel_ip: "{{ vxlan_ip_range }}.{{ (groups['all'] | list).index(peer_host) + 1 + 100 }}"
+#   when: tunnel_type == "src" and physical_interfaces is defined and physical_interfaces|length > 1
 
 - name: Setup VXLAN config for engine (engine to machine eth0)
   become: true
@@ -86,26 +90,30 @@
     interface_name: "ens3"
     vxlan_interface_name: "vxlan-eth0"
     interface_index: 0
+    remote_network_range: "{{ interface_base_ranges['eth0'][tunnel_type == 'src' and 'engine_range' or 'machine_range'] }}"
+    remote_tunnel_ip: "{{ vxlan_ip_range }}.{{ (groups['all'] | list).index(peer_host) + 1 }}"
   when: tunnel_type == "dest" and physical_interfaces is defined
 
-- name: Setup VXLAN config for engine (engine to machine eth1)
-  become: true
-  become_user: root
-  template:
-    src: 90-vxlan.yaml.j2
-    dest: /etc/netplan/90-vxlan-eth1.yaml
-    mode: "0400"
-  vars:
-    remote_ip: "{{ vxlan_remote_ips.eth1 | default(hostvars[peer_host]['public_ip']) }}"
-    index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
-    tunnel_address: "{{ vxlan_ip_range }}.{{ index + 100 }}/{{ vxlan_cidr }}"
-    vxlan_id: 201
-    vxlan_port: 4790
-    local_ip: "{{ physical_interfaces[0].ip.split('/')[0] }}"
-    interface_name: "ens3"
-    vxlan_interface_name: "vxlan-eth1"
-    interface_index: 1
-  when: tunnel_type == "dest" and physical_interfaces is defined
+# - name: Setup VXLAN config for engine (engine to machine eth1)
+#   become: true
+#   become_user: root
+#   template:
+#     src: 90-vxlan.yaml.j2
+#     dest: /etc/netplan/90-vxlan-eth1.yaml
+#     mode: "0400"
+#   vars:
+#     remote_ip: "{{ vxlan_remote_ips.eth1 | default(hostvars[peer_host]['public_ip']) }}"
+#     index: "{{ (groups['all'] | list).index(inventory_hostname) + 1 }}"
+#     tunnel_address: "{{ vxlan_ip_range }}.{{ index + 100 }}/{{ vxlan_cidr }}"
+#     vxlan_id: 201
+#     vxlan_port: 4790
+#     local_ip: "{{ physical_interfaces[0].ip.split('/')[0] }}"
+#     interface_name: "ens3"
+#     vxlan_interface_name: "vxlan-eth1"
+#     interface_index: 1
+#     remote_network_range: "{{ interface_base_ranges['eth1'][tunnel_type == 'src' and 'engine_range' or 'machine_range'] }}"
+#     remote_tunnel_ip: "{{ vxlan_ip_range }}.{{ (groups['all'] | list).index(peer_host) + 1 + 100 }}"
+#   when: tunnel_type == "dest" and physical_interfaces is defined
 
 - name: Start VXLAN
   become: true
@@ -133,7 +141,28 @@
     is_10_0_range: "{{ interface_ips.stdout_lines | select('search', '\\s10\\.0\\.') | list | length > 0 }}"
   when: tunnel_type == "dest"
 
-- name: Ensure MASQUERADE rule exists on main interface if in 10.0.0.0/16
+- name: Get default route interface for machines
+  become: true
+  command: ip route show default
+  register: default_route_machine
+  when: tunnel_type == "src"
+
+- name: Extract main interface from default route for machines
+  set_fact:
+    main_interface_machine: "{{ default_route_machine.stdout.split(' ')[4] }}"
+  when: tunnel_type == "src"
+
+- name: Ensure MASQUERADE rule exists on main interface for machines
+  become: true
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    out_interface: "{{ main_interface_machine }}"
+    jump: MASQUERADE
+    state: present
+  when: tunnel_type == "src"
+
+- name: Ensure MASQUERADE rule exists on main interface for engines
   become: true
   ansible.builtin.iptables:
     table: nat
@@ -141,5 +170,5 @@
     out_interface: "{{ main_interface }}"
     jump: MASQUERADE
     state: present
-  when: tunnel_type == "dest" and is_10_0_range
+  when: tunnel_type == "dest"
 # ECMP is now deployed at site level for all hosts

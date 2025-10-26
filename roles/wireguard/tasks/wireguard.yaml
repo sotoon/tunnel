@@ -297,7 +297,7 @@
   when: tunnel_type == "dest"
   tags: wireguard
 
-- name: Ensure MASQUERADE rule exists on main interface if in 10.0.0.0/16
+- name: Ensure MASQUERADE rule exists on main interface
   become: true
   ansible.builtin.iptables:
     table: nat
@@ -305,6 +305,6 @@
     out_interface: "{{ main_interface }}"
     jump: MASQUERADE
     state: present
-  when: tunnel_type == "dest" and is_10_0_range
+  when: tunnel_type == "dest"
   tags: wireguard
 # ECMP is now deployed at site level for all hosts

@@ -1,0 +1,44 @@
+---
+- name: Create dynamic route script directory
+  file:
+    path: /usr/local/bin
+    state: directory
+    mode: "0755"
+
+- name: Deploy dynamic route script
+  template:
+    src: dynamic-route-parallel.sh.j2
+    dest: /usr/local/bin/dynamic-route-parallel.sh
+    mode: "0755"
+    backup: yes
+  notify: restart dynamic-route
+
+- name: Deploy dynamic route systemd service
+  template:
+    src: dynamic-route.service.j2
+    dest: /etc/systemd/system/dynamic-route.service
+    mode: "0644"
+    backup: yes
+  notify:
+    - reload systemd
+    - restart dynamic-route
+
+- name: Deploy dynamic route systemd timer
+  template:
+    src: dynamic-route.timer.j2
+    dest: /etc/systemd/system/dynamic-route.timer
+    mode: "0644"
+    backup: yes
+  notify:
+    - reload systemd
+    - restart dynamic-route
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Enable and start dynamic route timer
+  systemd:
+    name: dynamic-route.timer
+    enabled: yes
+    state: started

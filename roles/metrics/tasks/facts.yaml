@@ -1,0 +1,17 @@
+- name: Gather system information for metrics
+  setup:
+    gather_subset:
+      - network
+      - hardware
+      - system
+
+- name: Set metrics facts
+  set_fact:
+    metrics_host_type: "{{ 'machine' if 'machine' in group_names else 'engine' }}"
+    tunnel_ips:
+      machine:
+        - "192.168.234.2"
+        - "192.168.234.4"
+      engine:
+        - "192.168.234.1"
+        - "192.168.234.3"
