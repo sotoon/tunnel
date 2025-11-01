@@ -31,6 +31,21 @@
     reload: true
     sysctl_file: /etc/sysctl.conf
 
+- name: Calculate peer network from peer physical interface
+  set_fact:
+    peer_interface_ip: "{{ hostvars[peer_host]['physical_interfaces'][0].ip }}"
+  when: tunnel_type == "src" and physical_interfaces is defined
+
+- name: Extract peer network range
+  command: python3 -c "import ipaddress; print(ipaddress.ip_network('{{ peer_interface_ip }}', strict=False).with_prefixlen)"
+  register: peer_network_result
+  when: tunnel_type == "src" and physical_interfaces is defined
+
+- name: Set peer network range fact
+  set_fact:
+    peer_network_range: "{{ peer_network_result.stdout }}"
+  when: tunnel_type == "src" and physical_interfaces is defined
+
 - name: Setup VXLAN config for eth0 (machine to engine)
   become: true
   become_user: root
@@ -48,7 +63,7 @@
     interface_name: "eth0"
     vxlan_interface_name: "vxlan-eth0"
     interface_index: 0
-    remote_network_range: "{{ interface_base_ranges['eth0'][tunnel_type == 'src' and 'engine_range' or 'machine_range'] }}"
+    remote_network_range: "{{ peer_network_range }}"
     remote_tunnel_ip: "{{ vxlan_ip_range }}.{{ (groups['all'] | list).index(peer_host) + 1 }}"
   when: tunnel_type == "src" and physical_interfaces is defined
 
@@ -73,6 +88,21 @@
 #     remote_tunnel_ip: "{{ vxlan_ip_range }}.{{ (groups['all'] | list).index(peer_host) + 1 + 100 }}"
 #   when: tunnel_type == "src" and physical_interfaces is defined and physical_interfaces|length > 1
 
+- name: Calculate peer network from peer physical interface (engine side)
+  set_fact:
+    peer_interface_ip: "{{ hostvars[peer_host]['physical_interfaces'][0].ip }}"
+  when: tunnel_type == "dest" and physical_interfaces is defined
+
+- name: Extract peer network range (engine side)
+  command: python3 -c "import ipaddress; print(ipaddress.ip_network('{{ peer_interface_ip }}', strict=False).with_prefixlen)"
+  register: peer_network_result
+  when: tunnel_type == "dest" and physical_interfaces is defined
+
+- name: Set peer network range fact (engine side)
+  set_fact:
+    peer_network_range: "{{ peer_network_result.stdout }}"
+  when: tunnel_type == "dest" and physical_interfaces is defined
+
 - name: Setup VXLAN config for engine (engine to machine eth0)
   become: true
   become_user: root
@@ -90,7 +120,7 @@
     interface_name: "ens3"
     vxlan_interface_name: "vxlan-eth0"
     interface_index: 0
-    remote_network_range: "{{ interface_base_ranges['eth0'][tunnel_type == 'src' and 'engine_range' or 'machine_range'] }}"
+    remote_network_range: "{{ peer_network_range }}"
     remote_tunnel_ip: "{{ vxlan_ip_range }}.{{ (groups['all'] | list).index(peer_host) + 1 }}"
   when: tunnel_type == "dest" and physical_interfaces is defined
 
