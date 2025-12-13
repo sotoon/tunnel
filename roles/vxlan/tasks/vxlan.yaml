@@ -4,6 +4,13 @@
     name: iproute2
     state: present
 
+- name: Ensure iptables-persistent is installed
+  become: true
+  apt:
+    name: iptables-persistent
+    state: present
+  when: ansible_os_family == "Debian"
+
 - name: Enable and persist IP forwarding (net.ipv4.ip_forward=1)
   become: true
   sysctl:
@@ -201,4 +208,10 @@
     jump: MASQUERADE
     state: present
   when: tunnel_type == "dest"
+
+- name: Save iptables rules
+  become: true
+  command: netfilter-persistent save
+  when: ansible_os_family == "Debian"
+  changed_when: false
 # ECMP is now deployed at site level for all hosts

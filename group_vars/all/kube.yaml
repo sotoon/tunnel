@@ -1,11 +1,14 @@
-KUBECONFIG_1: /Users/USER/kubeconfig1.yaml
-KUBECONFIG_2: /Users/USER/kubeconfig2.yaml
+KUBECONFIG_1: /Users/USER/.kube/KUBECONFIG1.yaml
+KUBECONFIG_2: /Users/USER/.kube/KUBECONFIG2.yaml
 KUBE_WORKERS_1:
-  []
-  # - 10.0.0.243
-  # - 10.0.0.183
+  - 172.20.0.149
+  - 172.20.0.124
+  - 172.20.0.8
 KUBE_WORKERS_2:
-  []
-  # - 10.0.10.27
-  # - 10.0.10.200
-  # - 10.0.10.136
+  - 10.0.10.182
+  - 10.0.10.195
+  - 10.0.10.110
+POD_CIDR_1: 10.232.64.0/18
+SERVICE_CIDR_1: 10.96.0.0/12
+POD_CIDR_2: 10.234.64.0/18
+SERVICE_CIDR_2: 10.112.0.0/12

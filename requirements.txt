@@ -1,0 +1,1 @@
+ansible==12.1.0 kubernetes==34.1.0

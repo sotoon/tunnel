@@ -4,7 +4,7 @@
       {{
         (groups
         | dict2items
-        | selectattr('key', 'match', '^(gre|wireguard|vxlan).*')
+        | selectattr('key', 'match', '^(gre|wireguard|vxlan)[0-9]+')
         | selectattr('value', 'contains', inventory_hostname)
         | map(attribute='key')
         | first) | default('vxlan1')
@@ -92,3 +92,20 @@
     client_ips: "{{ client_ips | default([]) + [hostvars[item].internal_ip] }}"
   loop: "{{ groups['clients'] | default([]) }}"
   when: has_clients | default(false)
+
+- name: Calculate local network routes for static protocol
+  command: python3 -c "import ipaddress; print(ipaddress.ip_network('{{ item.ip }}', strict=False).with_prefixlen)"
+  register: network_result
+  loop: "{{ physical_interfaces | default([]) }}"
+  when: physical_interfaces is defined
+  changed_when: false
+
+- name: Set local networks fact
+  set_fact:
+    local_networks: "{{ local_networks | default([]) + [item.stdout] }}"
+  loop: "{{ network_result.results | default([]) }}"
+  when: physical_interfaces is defined and network_result is defined
+
+- name: Set local IP for BGP peering with Kubernetes workers
+  set_fact:
+    local_ip: "{{ physical_interfaces[0].ip.split('/')[0] if physical_interfaces is defined and physical_interfaces|length > 0 else ansible_default_ipv4.address }}"

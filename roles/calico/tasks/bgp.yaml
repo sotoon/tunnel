@@ -1,19 +1,19 @@
 - name: Set base variables
   set_fact:
     worker_types:
-      - { index: 1, selector: 'src' }
-      - { index: 2, selector: 'dest' }
-    gre_groups: "{{ groups | dict2items | selectattr('key', 'match', '^gre.*') | map(attribute='key') }}"
+      - { index: 1, selector: "src" }
+      - { index: 2, selector: "dest" }
+    tunnel_groups: "{{ groups | dict2items | selectattr('key', 'match', '^(gre|vxlan)[0-9]+') | map(attribute='key') }}"
 
-- name: Gather facts for GRE hosts
+- name: Gather facts for tunnel hosts
   ansible.builtin.setup:
   delegate_to: "{{ item }}"
   delegate_facts: true
-  loop: "{{ gre_groups | map('extract', groups) | flatten }}"
+  loop: "{{ tunnel_groups | map('extract', groups) | flatten }}"
 
 - name: Set combination
   set_fact:
-    combinations: "{{ gre_groups | product(worker_types) | list }}"
+    combinations: "{{ tunnel_groups | product(worker_types) | list }}"
 
 - name: Process BGP Configuration for each worker type
   include_tasks: process_worker_type.yaml
@@ -30,18 +30,18 @@
   loop_control:
     loop_var: item
   vars:
-    gre_group: "{{ item.0 }}"
+    tunnel_group: "{{ item.0 }}"
     worker_type: "{{ item.1 }}"
-    gre_index: "{{ gre_group | regex_replace('^gre', '') | int }}"
-    asnumber: "6{{ gre_index }}{{ worker_type.index }}13"
-    name: "peer-to-cluster-gre{{ gre_index }}-worker{{ worker_type.index }}"
+    tunnel_type_name: "{{ tunnel_group | regex_replace('^(gre|vxlan).*', '\\1') }}"
+    tunnel_index: "{{ tunnel_group | regex_replace('^(gre|vxlan)', '') | int }}"
+    asnumber: "6{{ tunnel_index }}{{ worker_type.index }}13"
+    bgp_peer_name: "peer-to-cluster-{{ tunnel_type_name }}{{ tunnel_index }}-worker{{ worker_type.index }}"
     peer_ip: >-
       {{
         (
-          groups[gre_group]
+          groups[tunnel_group]
           | map('extract', hostvars)
           | selectattr('tunnel_type', 'equalto', worker_type.selector)
           | first
         ).ansible_default_ipv4.address
       }}
-

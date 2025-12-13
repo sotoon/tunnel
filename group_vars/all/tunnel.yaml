@@ -11,6 +11,11 @@ vxlan_cidr: 24
 ecmp_check_interval: 2
 ecmp_script_path: /usr/local/bin/ecmp-watcher.sh
 
+# BGP ECMP: Enable equal-cost multipath routing for BGP routes
+# When enabled, all tunnel groups advertise routes with identical BGP attributes
+# This allows Linux kernel to install multiple routes as ECMP
+enable_ecmp: true
+
 wireguard_port: 51820
 wireguard_private_key_path: /etc/wireguard/private_key
 wireguard_public_key_path: /etc/wireguard/public_key

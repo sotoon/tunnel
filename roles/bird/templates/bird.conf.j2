@@ -1,10 +1,11 @@
 router id {{ tunnel_local_address }};
 log syslog all;
 
-{% set tunnel_group = groups | dict2items | selectattr('key', 'match', '^(gre|wireguard|vxlan).*') | selectattr('value', 'contains', inventory_hostname) | map(attribute='key') | first | default('vxlan1') %}
+{% set tunnel_group = tunnel_group | default((groups | dict2items | selectattr('key', 'match', '^(gre|wireguard|vxlan)[0-9]+') | selectattr('value', 'contains', inventory_hostname) | map(attribute='key') | first) | default('vxlan1')) %}
 {% set is_client = tunnel_type == 'client' %}
 {% set group_num = tunnel_group | regex_replace('^(gre|wireguard|vxlan)', '') | int %}
 {% set as_prefix = '60' ~ group_num ~ '0' %}  {# Changed 1 to 0 here #}
+{% set enable_ecmp = enable_ecmp | default(false) %}
 {% if 'KUBE_WORKERS_1' in vars and inventory_hostname in KUBE_WORKERS_1 %}
     {% set workers_index = 1 %}
 {% elif 'KUBE_WORKERS_2' in vars and inventory_hostname in KUBE_WORKERS_2 %}
@@ -23,6 +24,13 @@ log syslog all;
 
 function set_nexthops()
 {
+{% if enable_ecmp %}
+  {# ECMP mode: Use equal attributes for all tunnel groups #}
+  bgp_med = 100;
+  bgp_local_pref = 300;
+  {# No AS path prepending for ECMP #}
+{% else %}
+  {# Priority mode: Different attributes based on tunnel group #}
   bgp_med = {{ group_num * 100 }};
   bgp_local_pref = {{ (3 - group_num + 1) * 100 }};
 
@@ -31,12 +39,23 @@ function set_nexthops()
   {% for _ in range(prepend_count) %}
       bgp_path.prepend({{ local_as }});
   {% endfor %}
+{% endif %}
 
   accept;
 }
 filter nexthops {
   set_nexthops();
 }
+
+{% if local_networks is defined and local_networks|length > 0 %}
+protocol static {
+    ipv4;
+{% for network in local_networks %}
+{% set interface = physical_interfaces[loop.index0] %}
+    route {{ network }} via "{{ interface.name }}";
+{% endfor %}
+}
+{% endif %}
 
 {% if is_client %}
 protocol bgp bgp_to_gateway {

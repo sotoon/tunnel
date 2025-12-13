@@ -1,42 +1,26 @@
-- name: Get service CIDR (raw)
-  shell: |
-    KUBECONFIG={{ lookup('vars', 'KUBECONFIG_' ~ worker_type.index) }} \
-    kubectl cluster-info dump | grep -m 1 service-cluster-ip-range | awk -F= '{print $2}' | tr -d '"'
-  register: service_cidr_raw
-  delegate_to: localhost
-
-- name: Debug raw service CIDR before processing
-  debug:
-    var: service_cidr_raw.stdout
-
-- name: Clean service CIDR string (strictly)
+- name: Get service CIDR from variable
   set_fact:
-    service_cidr_cleaned: "{{ service_cidr_raw.stdout | regex_replace('[^0-9./]', '') | trim }}"
+    service_cidr_base: "{{ lookup('vars', 'SERVICE_CIDR_' ~ worker_type.index) }}"
 
-- name: Service cidr cleaned
-  debug:
-    msg: "{{ service_cidr_cleaned }}"
-
-- name: Extract IP part without mask
+- name: Get pod CIDR from variable
   set_fact:
-    ip_only: "{{ service_cidr_cleaned.split('/')[0] }}"
-    cidr: "{{ service_cidr_cleaned.split('/')[1] }}"
-
-- name: Calculate forced /{{ cidr }} network block with Python (single line)
-  command: >
-    python3 -c "import ipaddress, sys; net=ipaddress.ip_network(sys.argv[1], strict=False); base=int(net.network_address); block=2**(32-{{ cidr }}); base=base-block if base>=int(ipaddress.IPv4Address('{{ ip_only }}')) else base; print(ipaddress.IPv4Network((base,{{ cidr }})).with_prefixlen)" "{{ service_cidr_cleaned }}"
-  register: normalized_network
-
-- name: Show normalized network CIDR
-  set_fact:
-    service_cidr_base: "{{ normalized_network.stdout }}"
+    pod_cidr: "{{ lookup('vars', 'POD_CIDR_' ~ worker_type.index) }}"
 
 - name: Validate service CIDR format
   assert:
     that:
+      - service_cidr_base is defined
       - service_cidr_base is string
-      - service_cidr_base | regex_search('^[0-9.]+/[0-9]+$')
-    fail_msg: "service_cidr appears malformed: {{ service_cidr_base }}"
+      - service_cidr_base is match('^[0-9.]+/[0-9]+$')
+    fail_msg: "service_cidr appears malformed or undefined: {{ service_cidr_base | default('undefined') }}"
+
+- name: Validate pod CIDR format
+  assert:
+    that:
+      - pod_cidr is defined
+      - pod_cidr is string
+      - pod_cidr is match('^[0-9.]+/[0-9]+$')
+    fail_msg: "pod_cidr appears malformed or undefined: {{ pod_cidr | default('undefined') }}"
 
 - name: Apply BGP Configuration
   kubernetes.core.k8s:
@@ -45,6 +29,5 @@
     template: bgpconfiguration.yaml.j2
   vars:
     asnumber: "6{{ worker_type.index }}012"
-    name: default
+    bgp_config_name: default
     service_cidr: "{{ service_cidr_base }}"
-
