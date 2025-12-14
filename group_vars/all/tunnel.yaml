@@ -16,6 +16,17 @@ ecmp_script_path: /usr/local/bin/ecmp-watcher.sh
 # This allows Linux kernel to install multiple routes as ECMP
 enable_ecmp: true
 
+# BGP to Kubernetes workers: Enable active BGP sessions from BIRD to workers
+# When using Calico with BGPPeer resources, set this to false (workers connect TO BIRD)
+# When not using Calico, set this to true to have BIRD actively peer with workers
+# Default: false (for Calico integration)
+enable_bird_to_worker_bgp: false
+
+# BGP from clients: Enable passive BGP sessions where clients connect to BIRD
+# Set to false if you don't have separate client machines that need BGP peering
+# Default: true (for backward compatibility)
+enable_bird_from_client_bgp: true
+
 wireguard_port: 51820
 wireguard_private_key_path: /etc/wireguard/private_key
 wireguard_public_key_path: /etc/wireguard/public_key

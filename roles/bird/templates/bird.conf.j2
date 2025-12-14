@@ -127,12 +127,20 @@ protocol bgp bgp_to_node{{ dest_index }}_2 {
 }
 {% endif %}
 
-{% if has_clients|default(false) and not is_client %}
+{#
+  BGP from Clients:
+  Clients use AS number 6{group_num}9913 (e.g., 619913 for group 1).
+  Note: This assumes all clients belong to tunnel group 1.
+  If you have clients in multiple tunnel groups, you may need to customize this.
+  These sessions are passive (clients connect to BIRD).
+#}
+{% set enable_client_bgp = enable_bird_from_client_bgp | default(true) %}
+{% if has_clients|default(false) and not is_client and enable_client_bgp %}
+{% set client_as = '6' ~ group_num ~ '9913' %}
 {% for client_ip in client_ips %}
 protocol bgp bgp_from_client_{{ loop.index }} {
     local {{ client_interface_1 }} as {{ local_as }};
-    neighbor {{ client_ip }} as 619913;
-    {% set client_remote_as = '619913' %}
+    neighbor {{ client_ip }} as {{ client_as }};
     ipv4 {
         export filter nexthops;
         import all;
@@ -151,7 +159,7 @@ protocol bgp bgp_from_client_{{ loop.index }} {
 {% for client_ip in client_ips %}
 protocol bgp bgp_from_client_{{ loop.index }}_2 {
     local {{ client_interface_2 }} as {{ local_as }};
-    neighbor {{ client_ip }} as 619913;
+    neighbor {{ client_ip }} as {{ client_as }};
     ipv4 {
         export filter nexthops;
         import all;
@@ -168,7 +176,14 @@ protocol bgp bgp_from_client_{{ loop.index }}_2 {
 {% endif %}
 {% endif %}
 
-{% set worker_list = vars['KUBE_WORKERS_' ~ workers_index] %}
+{#
+  BGP to Kubernetes Workers:
+  When using Calico with BGPPeer resources, workers connect TO BIRD (passive mode).
+  Only create active BGP sessions from BIRD to workers if explicitly enabled.
+#}
+{% set enable_worker_bgp = enable_bird_to_worker_bgp | default(false) %}
+{% if enable_worker_bgp %}
+{% set worker_list = vars['KUBE_WORKERS_' ~ workers_index] | default([]) %}
 
 {% for worker in worker_list %}
     {% if 'KUBE_WORKERS_1' in vars and worker in KUBE_WORKERS_1 %}
@@ -196,6 +211,7 @@ protocol bgp bgp_to_worker_{{ worker.split('.')[-1] }} {
     error wait time 5,30;
 }
 {% endfor %}
+{% endif %}
 
 protocol kernel {
     ipv4 {

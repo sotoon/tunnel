@@ -1,5 +1,5 @@
-KUBECONFIG_1: /Users/USER/.kube/KUBECONFIG1.yaml
-KUBECONFIG_2: /Users/USER/.kube/KUBECONFIG2.yaml
+KUBECONFIG_1: /Users/USER/.kube/cafev1.yaml
+KUBECONFIG_2: /Users/salarmgh/.kube/cafev2.yaml
 KUBE_WORKERS_1:
   - 172.20.0.149
   - 172.20.0.124
