@@ -1,0 +1,616 @@
+all:
+  hosts:
+    machine1:
+      ansible_host: compute@86.104.40.124
+      tunnel_type: src
+      public_ip: 86.104.40.124
+      physical_interfaces:
+        - name: eth0
+          ip: 172.20.0.67/24
+      vxlan_subnet: 192.168.234.0/24
+      vxlan_interface_1: vxlan-eth0
+    engine1:
+      ansible_host: compute@185.166.105.25
+      tunnel_type: dest
+      public_ip: 185.166.105.25
+      physical_interfaces:
+        - name: ens3
+          ip: 10.0.10.133/24
+      vxlan_remote_ips:
+        eth0: 86.104.40.124
+      vxlan_subnet: 192.168.234.0/24
+      vxlan_interface_1: vxlan-eth0
+    machine2:
+      ansible_host: compute@86.104.40.183
+      tunnel_type: src
+      public_ip: 86.104.40.183
+      physical_interfaces:
+        - name: eth0
+          ip: 172.20.0.77/24
+      vxlan_subnet: 192.168.234.0/24
+      vxlan_interface_1: vxlan-eth0
+    engine2:
+      ansible_host: compute@185.166.105.41
+      tunnel_type: dest
+      public_ip: 185.166.105.41
+      physical_interfaces:
+        - name: ens3
+          ip: 10.0.10.193/24
+      vxlan_remote_ips:
+        eth0: 86.104.40.183
+      vxlan_subnet: 192.168.234.0/24
+      vxlan_interface_1: vxlan-eth0
+    machine_client:
+      ansible_host: afra-network-client
+      public_ip: 86.104.40.106
+      tunnel_type: client
+      internal_ip: 172.20.0.22
+    engine_client:
+      ansible_host: neda-network-client
+      public_ip: 185.166.105.24
+      tunnel_type: client
+      internal_ip: 10.0.10.186
+    machine-bazaar-production-workers-b64-1-vlcmd-49sqz:
+      ansible_host: cluster-admin@172.20.0.7
+      public_ip: 172.20.0.7
+      tunnel_type: client
+      internal_ip: 172.20.0.7
+    machine-bazaar-production-workers-b64-1-vlcmd-dw46p:
+      ansible_host: cluster-admin@172.20.0.170
+      public_ip: 172.20.0.170
+      tunnel_type: client
+      internal_ip: 172.20.0.170
+    machine-bazaar-production-workers-b64-1-vlcmd-jv7qh:
+      ansible_host: cluster-admin@172.20.0.203
+      public_ip: 172.20.0.203
+      tunnel_type: client
+      internal_ip: 172.20.0.203
+    machine-bazaar-production-workers-b64-10-l9dmn-58x84:
+      ansible_host: cluster-admin@172.20.0.87
+      public_ip: 172.20.0.87
+      tunnel_type: client
+      internal_ip: 172.20.0.87
+    machine-bazaar-production-workers-b64-10-l9dmn-b8lz6:
+      ansible_host: cluster-admin@172.20.0.47
+      public_ip: 172.20.0.47
+      tunnel_type: client
+      internal_ip: 172.20.0.47
+    machine-bazaar-production-workers-b64-10-l9dmn-wqfvv:
+      ansible_host: cluster-admin@172.20.0.128
+      public_ip: 172.20.0.128
+      tunnel_type: client
+      internal_ip: 172.20.0.128
+    machine-bazaar-production-workers-b64-11-6kqcx-h2xf7:
+      ansible_host: cluster-admin@172.20.0.208
+      public_ip: 172.20.0.208
+      tunnel_type: client
+      internal_ip: 172.20.0.208
+    machine-bazaar-production-workers-b64-11-6kqcx-lxtv8:
+      ansible_host: cluster-admin@172.20.0.68
+      public_ip: 172.20.0.68
+      tunnel_type: client
+      internal_ip: 172.20.0.68
+    machine-bazaar-production-workers-b64-11-6kqcx-zz4lt:
+      ansible_host: cluster-admin@172.20.0.57
+      public_ip: 172.20.0.57
+      tunnel_type: client
+      internal_ip: 172.20.0.57
+    machine-bazaar-production-workers-b64-12-pxflm-4c5jw:
+      ansible_host: cluster-admin@172.20.0.133
+      public_ip: 172.20.0.133
+      tunnel_type: client
+      internal_ip: 172.20.0.133
+    machine-bazaar-production-workers-b64-12-pxflm-p6qgt:
+      ansible_host: cluster-admin@172.20.0.53
+      public_ip: 172.20.0.53
+      tunnel_type: client
+      internal_ip: 172.20.0.53
+    machine-bazaar-production-workers-b64-12-pxflm-r9zdh:
+      ansible_host: cluster-admin@172.20.0.29
+      public_ip: 172.20.0.29
+      tunnel_type: client
+      internal_ip: 172.20.0.29
+    machine-bazaar-production-workers-b64-14-9mws9-l5l9n:
+      ansible_host: cluster-admin@172.20.0.129
+      public_ip: 172.20.0.129
+      tunnel_type: client
+      internal_ip: 172.20.0.129
+    machine-bazaar-production-workers-b64-14-9mws9-pgqdd:
+      ansible_host: cluster-admin@172.20.0.4
+      public_ip: 172.20.0.4
+      tunnel_type: client
+      internal_ip: 172.20.0.4
+    machine-bazaar-production-workers-b64-14-9mws9-s2hfm:
+      ansible_host: cluster-admin@172.20.0.185
+      public_ip: 172.20.0.185
+      tunnel_type: client
+      internal_ip: 172.20.0.185
+    machine-bazaar-production-workers-b64-15-cxr8l-l64ns:
+      ansible_host: cluster-admin@172.20.0.143
+      public_ip: 172.20.0.143
+      tunnel_type: client
+      internal_ip: 172.20.0.143
+    machine-bazaar-production-workers-b64-2-ljch8-74x2n:
+      ansible_host: cluster-admin@172.20.0.234
+      public_ip: 172.20.0.234
+      tunnel_type: client
+      internal_ip: 172.20.0.234
+    machine-bazaar-production-workers-b64-2-ljch8-n7kg4:
+      ansible_host: cluster-admin@172.20.0.223
+      public_ip: 172.20.0.223
+      tunnel_type: client
+      internal_ip: 172.20.0.223
+    machine-bazaar-production-workers-b64-2-ljch8-zbrhc:
+      ansible_host: cluster-admin@172.20.0.56
+      public_ip: 172.20.0.56
+      tunnel_type: client
+      internal_ip: 172.20.0.56
+    machine-bazaar-production-workers-b64-3-dthnr-9z6z5:
+      ansible_host: cluster-admin@172.20.0.9
+      public_ip: 172.20.0.9
+      tunnel_type: client
+      internal_ip: 172.20.0.9
+    machine-bazaar-production-workers-b64-3-dthnr-hb6fn:
+      ansible_host: cluster-admin@172.20.0.93
+      public_ip: 172.20.0.93
+      tunnel_type: client
+      internal_ip: 172.20.0.93
+    machine-bazaar-production-workers-b64-3-dthnr-pd78n:
+      ansible_host: cluster-admin@172.20.0.131
+      public_ip: 172.20.0.131
+      tunnel_type: client
+      internal_ip: 172.20.0.131
+    machine-bazaar-production-workers-b64-4-mt4p6-2sld5:
+      ansible_host: cluster-admin@172.20.0.148
+      public_ip: 172.20.0.148
+      tunnel_type: client
+      internal_ip: 172.20.0.148
+    machine-bazaar-production-workers-b64-4-mt4p6-hmlb6:
+      ansible_host: cluster-admin@172.20.0.119
+      public_ip: 172.20.0.119
+      tunnel_type: client
+      internal_ip: 172.20.0.119
+    machine-bazaar-production-workers-b64-4-mt4p6-nmdbq:
+      ansible_host: cluster-admin@172.20.0.209
+      public_ip: 172.20.0.209
+      tunnel_type: client
+      internal_ip: 172.20.0.209
+    machine-bazaar-production-workers-b64-5-7zwrb-76w6s:
+      ansible_host: cluster-admin@172.20.0.196
+      public_ip: 172.20.0.196
+      tunnel_type: client
+      internal_ip: 172.20.0.196
+    machine-bazaar-production-workers-b64-5-7zwrb-mmqz4:
+      ansible_host: cluster-admin@172.20.0.46
+      public_ip: 172.20.0.46
+      tunnel_type: client
+      internal_ip: 172.20.0.46
+    machine-bazaar-production-workers-b64-5-7zwrb-x4tqb:
+      ansible_host: cluster-admin@172.20.0.207
+      public_ip: 172.20.0.207
+      tunnel_type: client
+      internal_ip: 172.20.0.207
+    machine-bazaar-production-workers-b64-6-wcst4-d4hbv:
+      ansible_host: cluster-admin@172.20.0.173
+      public_ip: 172.20.0.173
+      tunnel_type: client
+      internal_ip: 172.20.0.173
+    machine-bazaar-production-workers-b64-6-wcst4-k8tr9:
+      ansible_host: cluster-admin@172.20.0.146
+      public_ip: 172.20.0.146
+      tunnel_type: client
+      internal_ip: 172.20.0.146
+    machine-bazaar-production-workers-b64-6-wcst4-l9vkx:
+      ansible_host: cluster-admin@172.20.0.136
+      public_ip: 172.20.0.136
+      tunnel_type: client
+      internal_ip: 172.20.0.136
+    machine-bazaar-production-workers-b64-7-zfmct-7vzbt:
+      ansible_host: cluster-admin@172.20.0.240
+      public_ip: 172.20.0.240
+      tunnel_type: client
+      internal_ip: 172.20.0.240
+    machine-bazaar-production-workers-b64-7-zfmct-nx4lc:
+      ansible_host: cluster-admin@172.20.0.54
+      public_ip: 172.20.0.54
+      tunnel_type: client
+      internal_ip: 172.20.0.54
+    machine-bazaar-production-workers-b64-7-zfmct-p8cwj:
+      ansible_host: cluster-admin@172.20.0.147
+      public_ip: 172.20.0.147
+      tunnel_type: client
+      internal_ip: 172.20.0.147
+    machine-bazaar-production-workers-b64-8-r8gsg-8bk5z:
+      ansible_host: cluster-admin@172.20.0.40
+      public_ip: 172.20.0.40
+      tunnel_type: client
+      internal_ip: 172.20.0.40
+    machine-bazaar-production-workers-b64-8-r8gsg-drpx8:
+      ansible_host: cluster-admin@172.20.0.55
+      public_ip: 172.20.0.55
+      tunnel_type: client
+      internal_ip: 172.20.0.55
+    machine-bazaar-production-workers-b64-8-r8gsg-vvxbq:
+      ansible_host: cluster-admin@172.20.0.115
+      public_ip: 172.20.0.115
+      tunnel_type: client
+      internal_ip: 172.20.0.115
+    machine-bazaar-production-workers-b64-9-g8h5n-87szh:
+      ansible_host: cluster-admin@172.20.0.239
+      public_ip: 172.20.0.239
+      tunnel_type: client
+      internal_ip: 172.20.0.239
+    machine-bazaar-production-workers-b64-9-g8h5n-kb5bp:
+      ansible_host: cluster-admin@172.20.0.61
+      public_ip: 172.20.0.61
+      tunnel_type: client
+      internal_ip: 172.20.0.61
+    machine-bazaar-production-workers-b64-9-g8h5n-rgbds:
+      ansible_host: cluster-admin@172.20.0.69
+      public_ip: 172.20.0.69
+      tunnel_type: client
+      internal_ip: 172.20.0.69
+    machine-bazaar-production-workers-elastic-1-27-ptjhq-jdbxq:
+      ansible_host: cluster-admin@172.20.0.168
+      public_ip: 172.20.0.168
+      tunnel_type: client
+      internal_ip: 172.20.0.168
+    machine-bazaar-production-workers-elastic-1-27-ptjhq-nmg7s:
+      ansible_host: cluster-admin@172.20.0.237
+      public_ip: 172.20.0.237
+      tunnel_type: client
+      internal_ip: 172.20.0.237
+    machine-bazaar-production-workers-elastic-1-27-ptjhq-sq2l6:
+      ansible_host: cluster-admin@172.20.0.187
+      public_ip: 172.20.0.187
+      tunnel_type: client
+      internal_ip: 172.20.0.187
+    machine-bazaar-production-workers-elastic-2-27-sgwlp-6vg2l:
+      ansible_host: cluster-admin@172.20.0.181
+      public_ip: 172.20.0.181
+      tunnel_type: client
+      internal_ip: 172.20.0.181
+    machine-bazaar-production-workers-elastic-2-27-sgwlp-nh8zz:
+      ansible_host: cluster-admin@172.20.0.201
+      public_ip: 172.20.0.201
+      tunnel_type: client
+      internal_ip: 172.20.0.201
+    machine-bazaar-production-workers-elastic-2-27-sgwlp-pvcdc:
+      ansible_host: cluster-admin@172.20.0.210
+      public_ip: 172.20.0.210
+      tunnel_type: client
+      internal_ip: 172.20.0.210
+    machine-bazaar-production-workers-hm64-13-kbvgl-c9mth:
+      ansible_host: cluster-admin@172.20.0.174
+      public_ip: 172.20.0.174
+      tunnel_type: client
+      internal_ip: 172.20.0.174
+    machine-bazaar-production-workers-hm64-13-kbvgl-vcdxm:
+      ansible_host: cluster-admin@172.20.0.10
+      public_ip: 172.20.0.10
+      tunnel_type: client
+      internal_ip: 172.20.0.10
+    machine-bazaar-production-workers-hm64-13-kbvgl-z9jg7:
+      ansible_host: cluster-admin@172.20.0.182
+      public_ip: 172.20.0.182
+      tunnel_type: client
+      internal_ip: 172.20.0.182
+    machine-bazaar-production-workers-mongodb-1-27-c4gpk-b965q:
+      ansible_host: cluster-admin@172.20.0.166
+      public_ip: 172.20.0.166
+      tunnel_type: client
+      internal_ip: 172.20.0.166
+    machine-bazaar-production-workers-mongodb-1-27-c4gpk-n7btr:
+      ansible_host: cluster-admin@172.20.0.25
+      public_ip: 172.20.0.25
+      tunnel_type: client
+      internal_ip: 172.20.0.25
+    machine-bazaar-production-workers-mongodb-1-27-c4gpk-pklxz:
+      ansible_host: cluster-admin@172.20.0.191
+      public_ip: 172.20.0.191
+      tunnel_type: client
+      internal_ip: 172.20.0.191
+    machine-bazaar-production-workers-mongodb-2-27-69t79-c5227:
+      ansible_host: cluster-admin@172.20.0.100
+      public_ip: 172.20.0.100
+      tunnel_type: client
+      internal_ip: 172.20.0.100
+    machine-bazaar-production-workers-mongodb-2-27-69t79-cd5kj:
+      ansible_host: cluster-admin@172.20.0.26
+      public_ip: 172.20.0.26
+      tunnel_type: client
+      internal_ip: 172.20.0.26
+    machine-bazaar-production-workers-mongodb-2-27-69t79-dggmf:
+      ansible_host: cluster-admin@172.20.0.59
+      public_ip: 172.20.0.59
+      tunnel_type: client
+      internal_ip: 172.20.0.59
+    machine-bazaar-production-workers-redis-1-hm64-ndrgj-p5zz8:
+      ansible_host: cluster-admin@172.20.0.241
+      public_ip: 172.20.0.241
+      tunnel_type: client
+      internal_ip: 172.20.0.241
+    machine-bazaar-production-workers-redis-1-hm64-ndrgj-p6q9d:
+      ansible_host: cluster-admin@172.20.0.111
+      public_ip: 172.20.0.111
+      tunnel_type: client
+      internal_ip: 172.20.0.111
+    machine-bazaar-production-workers-redis-1-hm64-ndrgj-s2w2l:
+      ansible_host: cluster-admin@172.20.0.233
+      public_ip: 172.20.0.233
+      tunnel_type: client
+      internal_ip: 172.20.0.233
+    machine-bazaar-production-workers-redis-2-hm64-fbzsd-cg2rv:
+      ansible_host: cluster-admin@172.20.0.3
+      public_ip: 172.20.0.3
+      tunnel_type: client
+      internal_ip: 172.20.0.3
+    machine-bazaar-production-workers-redis-2-hm64-fbzsd-mbhtz:
+      ansible_host: cluster-admin@172.20.0.81
+      public_ip: 172.20.0.81
+      tunnel_type: client
+      internal_ip: 172.20.0.81
+    machine-bazaar-production-workers-redis-2-hm64-fbzsd-pcd57:
+      ansible_host: cluster-admin@172.20.0.154
+      public_ip: 172.20.0.154
+      tunnel_type: client
+      internal_ip: 172.20.0.154
+    machine-bazaar-production-workers-redis-2-hm64-fbzsd-smfgg:
+      ansible_host: cluster-admin@172.20.0.183
+      public_ip: 172.20.0.183
+      tunnel_type: client
+      internal_ip: 172.20.0.183
+    machine-bazaar-production-workers-redis-3-hm64-xmzl6-9m27m:
+      ansible_host: cluster-admin@172.20.0.98
+      public_ip: 172.20.0.98
+      tunnel_type: client
+      internal_ip: 172.20.0.98
+    machine-bazaar-production-workers-redis-3-hm64-xmzl6-dvmxr:
+      ansible_host: cluster-admin@172.20.0.142
+      public_ip: 172.20.0.142
+      tunnel_type: client
+      internal_ip: 172.20.0.142
+    machine-bazaar-production-workers-redis-3-hm64-xmzl6-mdl7q:
+      ansible_host: cluster-admin@172.20.0.118
+      public_ip: 172.20.0.118
+      tunnel_type: client
+      internal_ip: 172.20.0.118
+    machine-bazaar-production-workers-redis-4-hm64-bmjqw-7v566:
+      ansible_host: cluster-admin@172.20.0.84
+      public_ip: 172.20.0.84
+      tunnel_type: client
+      internal_ip: 172.20.0.84
+    machine-bazaar-production-workers-redis-4-hm64-bmjqw-cltmz:
+      ansible_host: cluster-admin@172.20.0.235
+      public_ip: 172.20.0.235
+      tunnel_type: client
+      internal_ip: 172.20.0.235
+    machine-bazaar-production-workers-redis-4-hm64-bmjqw-drww6:
+      ansible_host: cluster-admin@172.20.0.252
+      public_ip: 172.20.0.252
+      tunnel_type: client
+      internal_ip: 172.20.0.252
+    machine-bazaar-production-workers-redis-5-hm54-6rgxh-c5np5:
+      ansible_host: cluster-admin@172.20.0.58
+      public_ip: 172.20.0.58
+      tunnel_type: client
+      internal_ip: 172.20.0.58
+    machine-bazaar-production-workers-redis-5-hm54-6rgxh-sfrs6:
+      ansible_host: cluster-admin@172.20.0.117
+      public_ip: 172.20.0.117
+      tunnel_type: client
+      internal_ip: 172.20.0.117
+    machine-bazaar-production-workers-redis-5-hm54-6rgxh-zzh9r:
+      ansible_host: cluster-admin@172.20.0.122
+      public_ip: 172.20.0.122
+      tunnel_type: client
+      internal_ip: 172.20.0.122
+    engine-cafebazaar-workers-b64-1-4gwzn-bmx72:
+      ansible_host: cluster-admin@10.0.10.157
+      public_ip: 10.0.10.157
+      tunnel_type: client
+      internal_ip: 10.0.10.157
+      gateway_peer: engine1
+    engine-cafebazaar-workers-b64-1-4gwzn-vj42j:
+      ansible_host: cluster-admin@10.0.10.151
+      public_ip: 10.0.10.151
+      tunnel_type: client
+      internal_ip: 10.0.10.151
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-2-pnvf6-8srtm:
+      ansible_host: cluster-admin@10.0.10.140
+      public_ip: 10.0.10.140
+      tunnel_type: client
+      internal_ip: 10.0.10.140
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-2-pnvf6-kfpxn:
+      ansible_host: cluster-admin@10.0.10.3
+      public_ip: 10.0.10.3
+      tunnel_type: client
+      internal_ip: 10.0.10.3
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-2-pnvf6-mrljb:
+      ansible_host: cluster-admin@10.0.10.146
+      public_ip: 10.0.10.146
+      tunnel_type: client
+      internal_ip: 10.0.10.146
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-3-frfl2-qnzcg:
+      ansible_host: cluster-admin@10.0.10.95
+      public_ip: 10.0.10.95
+      tunnel_type: client
+      internal_ip: 10.0.10.95
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-3-frfl2-vrdjb:
+      ansible_host: cluster-admin@10.0.10.77
+      public_ip: 10.0.10.77
+      tunnel_type: client
+      internal_ip: 10.0.10.77
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-3-frfl2-wf4tc:
+      ansible_host: cluster-admin@10.0.10.11
+      public_ip: 10.0.10.11
+      tunnel_type: client
+      internal_ip: 10.0.10.11
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-4-w9ln4-bkncj:
+      ansible_host: cluster-admin@10.0.10.86
+      public_ip: 10.0.10.86
+      tunnel_type: client
+      internal_ip: 10.0.10.86
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-4-w9ln4-dh2gc:
+      ansible_host: cluster-admin@10.0.10.213
+      public_ip: 10.0.10.213
+      tunnel_type: client
+      internal_ip: 10.0.10.213
+      gateway_peer: engine1
+    engine-cafebazaar-workers-c1d16-4-w9ln4-q4pfl:
+      ansible_host: cluster-admin@10.0.10.123
+      public_ip: 10.0.10.123
+      tunnel_type: client
+      internal_ip: 10.0.10.123
+      gateway_peer: engine1
+    engine-cafebazaar-workers-g1d16-1-jvjtb-4v7bb:
+      ansible_host: cluster-admin@10.0.10.67
+      public_ip: 10.0.10.67
+      tunnel_type: client
+      internal_ip: 10.0.10.67
+      gateway_peer: engine1
+    engine-cafebazaar-workers-g1d16-1-jvjtb-8swds:
+      ansible_host: cluster-admin@10.0.10.57
+      public_ip: 10.0.10.57
+      tunnel_type: client
+      internal_ip: 10.0.10.57
+      gateway_peer: engine1
+    engine-cafebazaar-workers-g1d16-1-jvjtb-plhnn:
+      ansible_host: cluster-admin@10.0.10.62
+      public_ip: 10.0.10.62
+      tunnel_type: client
+      internal_ip: 10.0.10.62
+      gateway_peer: engine1
+    engine-cafebazaar-workers-redis-1-g1d7-9677r-8cg7x:
+      ansible_host: cluster-admin@10.0.10.192
+      public_ip: 10.0.10.192
+      tunnel_type: client
+      internal_ip: 10.0.10.192
+      gateway_peer: engine1
+    engine-cafebazaar-workers-redis-1-g1d7-9677r-nnrn2:
+      ansible_host: cluster-admin@10.0.10.122
+      public_ip: 10.0.10.122
+      tunnel_type: client
+      internal_ip: 10.0.10.122
+      gateway_peer: engine1
+    engine-cafebazaar-workers-redis-1-g1d7-9677r-q95g6:
+      ansible_host: cluster-admin@10.0.10.210
+      public_ip: 10.0.10.210
+      tunnel_type: client
+      internal_ip: 10.0.10.210
+      gateway_peer: engine1
+  children:
+    vxlan1:
+      hosts:
+        machine1:
+        engine1:
+    vxlan2:
+      hosts:
+        machine2:
+        engine2:
+    # clients:
+    #   hosts:
+    #     machine_client:
+    #     engine_client:
+    kube_workers:
+      children:
+        kube_workers_1:
+          hosts:
+            machine-bazaar-production-workers-b64-1-vlcmd-49sqz:
+            machine-bazaar-production-workers-b64-1-vlcmd-dw46p:
+            machine-bazaar-production-workers-b64-1-vlcmd-jv7qh:
+            machine-bazaar-production-workers-b64-10-l9dmn-58x84:
+            machine-bazaar-production-workers-b64-10-l9dmn-b8lz6:
+            machine-bazaar-production-workers-b64-10-l9dmn-wqfvv:
+            machine-bazaar-production-workers-b64-11-6kqcx-h2xf7:
+            machine-bazaar-production-workers-b64-11-6kqcx-lxtv8:
+            machine-bazaar-production-workers-b64-11-6kqcx-zz4lt:
+            machine-bazaar-production-workers-b64-12-pxflm-4c5jw:
+            machine-bazaar-production-workers-b64-12-pxflm-p6qgt:
+            machine-bazaar-production-workers-b64-12-pxflm-r9zdh:
+            machine-bazaar-production-workers-b64-14-9mws9-l5l9n:
+            machine-bazaar-production-workers-b64-14-9mws9-pgqdd:
+            machine-bazaar-production-workers-b64-14-9mws9-s2hfm:
+            machine-bazaar-production-workers-b64-15-cxr8l-l64ns:
+            machine-bazaar-production-workers-b64-2-ljch8-74x2n:
+            machine-bazaar-production-workers-b64-2-ljch8-n7kg4:
+            machine-bazaar-production-workers-b64-2-ljch8-zbrhc:
+            machine-bazaar-production-workers-b64-3-dthnr-9z6z5:
+            machine-bazaar-production-workers-b64-3-dthnr-hb6fn:
+            machine-bazaar-production-workers-b64-3-dthnr-pd78n:
+            machine-bazaar-production-workers-b64-4-mt4p6-2sld5:
+            machine-bazaar-production-workers-b64-4-mt4p6-hmlb6:
+            machine-bazaar-production-workers-b64-4-mt4p6-nmdbq:
+            machine-bazaar-production-workers-b64-5-7zwrb-76w6s:
+            machine-bazaar-production-workers-b64-5-7zwrb-mmqz4:
+            machine-bazaar-production-workers-b64-5-7zwrb-x4tqb:
+            machine-bazaar-production-workers-b64-6-wcst4-d4hbv:
+            machine-bazaar-production-workers-b64-6-wcst4-k8tr9:
+            machine-bazaar-production-workers-b64-6-wcst4-l9vkx:
+            machine-bazaar-production-workers-b64-7-zfmct-7vzbt:
+            machine-bazaar-production-workers-b64-7-zfmct-nx4lc:
+            machine-bazaar-production-workers-b64-7-zfmct-p8cwj:
+            machine-bazaar-production-workers-b64-8-r8gsg-8bk5z:
+            machine-bazaar-production-workers-b64-8-r8gsg-drpx8:
+            machine-bazaar-production-workers-b64-8-r8gsg-vvxbq:
+            machine-bazaar-production-workers-b64-9-g8h5n-87szh:
+            machine-bazaar-production-workers-b64-9-g8h5n-kb5bp:
+            machine-bazaar-production-workers-b64-9-g8h5n-rgbds:
+            machine-bazaar-production-workers-elastic-1-27-ptjhq-jdbxq:
+            machine-bazaar-production-workers-elastic-1-27-ptjhq-nmg7s:
+            machine-bazaar-production-workers-elastic-1-27-ptjhq-sq2l6:
+            machine-bazaar-production-workers-elastic-2-27-sgwlp-6vg2l:
+            machine-bazaar-production-workers-elastic-2-27-sgwlp-nh8zz:
+            machine-bazaar-production-workers-elastic-2-27-sgwlp-pvcdc:
+            machine-bazaar-production-workers-hm64-13-kbvgl-c9mth:
+            machine-bazaar-production-workers-hm64-13-kbvgl-vcdxm:
+            machine-bazaar-production-workers-hm64-13-kbvgl-z9jg7:
+            machine-bazaar-production-workers-mongodb-1-27-c4gpk-b965q:
+            machine-bazaar-production-workers-mongodb-1-27-c4gpk-n7btr:
+            machine-bazaar-production-workers-mongodb-1-27-c4gpk-pklxz:
+            machine-bazaar-production-workers-mongodb-2-27-69t79-c5227:
+            machine-bazaar-production-workers-mongodb-2-27-69t79-cd5kj:
+            machine-bazaar-production-workers-mongodb-2-27-69t79-dggmf:
+            machine-bazaar-production-workers-redis-1-hm64-ndrgj-p5zz8:
+            machine-bazaar-production-workers-redis-1-hm64-ndrgj-p6q9d:
+            machine-bazaar-production-workers-redis-1-hm64-ndrgj-s2w2l:
+            machine-bazaar-production-workers-redis-2-hm64-fbzsd-cg2rv:
+            machine-bazaar-production-workers-redis-2-hm64-fbzsd-mbhtz:
+            machine-bazaar-production-workers-redis-2-hm64-fbzsd-pcd57:
+            machine-bazaar-production-workers-redis-2-hm64-fbzsd-smfgg:
+            machine-bazaar-production-workers-redis-3-hm64-xmzl6-9m27m:
+            machine-bazaar-production-workers-redis-3-hm64-xmzl6-dvmxr:
+            machine-bazaar-production-workers-redis-3-hm64-xmzl6-mdl7q:
+            machine-bazaar-production-workers-redis-4-hm64-bmjqw-7v566:
+            machine-bazaar-production-workers-redis-4-hm64-bmjqw-cltmz:
+            machine-bazaar-production-workers-redis-4-hm64-bmjqw-drww6:
+            machine-bazaar-production-workers-redis-5-hm54-6rgxh-c5np5:
+            machine-bazaar-production-workers-redis-5-hm54-6rgxh-sfrs6:
+            machine-bazaar-production-workers-redis-5-hm54-6rgxh-zzh9r:
+        kube_workers_2:
+          hosts:
+            engine-cafebazaar-workers-b64-1-4gwzn-bmx72:
+            engine-cafebazaar-workers-b64-1-4gwzn-vj42j:
+            engine-cafebazaar-workers-c1d16-2-pnvf6-8srtm:
+            engine-cafebazaar-workers-c1d16-2-pnvf6-kfpxn:
+            engine-cafebazaar-workers-c1d16-2-pnvf6-mrljb:
+            engine-cafebazaar-workers-c1d16-3-frfl2-qnzcg:
+            engine-cafebazaar-workers-c1d16-3-frfl2-vrdjb:
+            engine-cafebazaar-workers-c1d16-3-frfl2-wf4tc:
+            engine-cafebazaar-workers-c1d16-4-w9ln4-bkncj:
+            engine-cafebazaar-workers-c1d16-4-w9ln4-dh2gc:
+            engine-cafebazaar-workers-c1d16-4-w9ln4-q4pfl:
+            engine-cafebazaar-workers-g1d16-1-jvjtb-4v7bb:
+            engine-cafebazaar-workers-g1d16-1-jvjtb-8swds:
+            engine-cafebazaar-workers-g1d16-1-jvjtb-plhnn:
+            engine-cafebazaar-workers-redis-1-g1d7-9677r-8cg7x:
+            engine-cafebazaar-workers-redis-1-g1d7-9677r-nnrn2:
+            engine-cafebazaar-workers-redis-1-g1d7-9677r-q95g6:

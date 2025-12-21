@@ -20,7 +20,7 @@ enable_ecmp: true
 # When using Calico with BGPPeer resources, set this to false (workers connect TO BIRD)
 # When not using Calico, set this to true to have BIRD actively peer with workers
 # Default: false (for Calico integration)
-enable_bird_to_worker_bgp: false
+enable_bird_to_worker_bgp: true
 
 # BGP from clients: Enable passive BGP sessions where clients connect to BIRD
 # Set to false if you don't have separate client machines that need BGP peering

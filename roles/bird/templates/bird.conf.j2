@@ -29,6 +29,78 @@ log syslog all;
 define PATH_COMMUNITY = (65000, {{ group_num }});
 {% endif %}
 
+{# ============================================== #}
+{# TUNNEL FILTERS - Used for tunnel-to-tunnel BGP #}
+{# ============================================== #}
+
+{# Export filter for tunnel peers: tag with path community #}
+function set_tunnel_nexthops()
+{
+{% if enable_path_isolation %}
+  {# Tag routes with our path community #}
+  bgp_community.add(PATH_COMMUNITY);
+{% endif %}
+  {# Use consistent metrics for tunnel peering #}
+  bgp_med = 100;
+  bgp_local_pref = 300;
+  accept;
+}
+
+filter tunnel_export {
+  set_tunnel_nexthops();
+}
+
+{% if enable_path_isolation %}
+{# Import filter for tunnel peers: prefer routes from same path #}
+filter tunnel_import {
+  if (PATH_COMMUNITY ~ bgp_community) then {
+    {# Route came from our path - high preference #}
+    bgp_local_pref = 500;
+  } else {
+    {# Route came from different path - low preference (backup only) #}
+    bgp_local_pref = 50;
+  }
+  accept;
+}
+
+{# Strict tunnel import: reject routes from other paths entirely #}
+filter tunnel_import_strict {
+  if (PATH_COMMUNITY ~ bgp_community) then {
+    bgp_local_pref = 500;
+    accept;
+  }
+  reject;
+}
+{% endif %}
+
+{# ============================================== #}
+{# CALICO/ECMP FILTERS - Used for worker BGP     #}
+{# ============================================== #}
+
+{# Export filter for Calico workers: ECMP-friendly, equal metrics #}
+function set_ecmp_nexthops()
+{
+  {# Use equal attributes for ECMP across all tunnel groups #}
+  bgp_med = 100;
+  bgp_local_pref = 300;
+  {# Do NOT add path community - Calico doesn't need it #}
+  accept;
+}
+
+filter ecmp_export {
+  set_ecmp_nexthops();
+}
+
+{# Import filter for Calico workers: accept all with equal preference #}
+filter ecmp_import {
+  bgp_local_pref = 300;
+  accept;
+}
+
+{# ============================================== #}
+{# LEGACY FILTERS - For backward compatibility   #}
+{# ============================================== #}
+
 function set_nexthops()
 {
 {% if enable_ecmp %}
@@ -55,30 +127,27 @@ function set_nexthops()
 
   accept;
 }
+
 filter nexthops {
   set_nexthops();
 }
 
 {% if enable_path_isolation %}
-{# Import filter for path isolation: prefer routes from same tunnel path #}
+{# Legacy path isolation import filter #}
 filter path_isolation_import {
   if (PATH_COMMUNITY ~ bgp_community) then {
-    {# Route came from our path - high preference #}
     bgp_local_pref = 500;
   } else {
-    {# Route came from different path - low preference (backup only) #}
     bgp_local_pref = 50;
   }
   accept;
 }
 
-{# Strict path isolation: reject routes from other paths entirely #}
 filter path_isolation_strict {
   if (PATH_COMMUNITY ~ bgp_community) then {
     bgp_local_pref = 500;
     accept;
   }
-  {# Reject routes without our path community #}
   reject;
 }
 {% endif %}
@@ -93,14 +162,18 @@ protocol static {
 }
 {% endif %}
 
+{# ============================================== #}
+{# TUNNEL BGP SESSIONS - Path isolation enabled  #}
+{# ============================================== #}
+
 {% if is_client %}
 protocol bgp bgp_to_gateway {
     local {{ tunnel_local_address }} as {{ local_as }};
     neighbor {{ tunnel_dest_address }} as {{ gateway_as }};
     ipv4 {
-        export filter nexthops;
+        export filter tunnel_export;
 {% if enable_path_isolation %}
-        import filter path_isolation_import;
+        import filter tunnel_import;
 {% else %}
         import all;
 {% endif %}
@@ -119,9 +192,9 @@ protocol bgp bgp_to_gateway_2 {
     local {{ tunnel_local_address }} as {{ local_as }};
     neighbor {{ tunnel_dest_address_2 }} as {{ gateway_as }};
     ipv4 {
-        export filter nexthops;
+        export filter tunnel_export;
 {% if enable_path_isolation %}
-        import filter path_isolation_import;
+        import filter tunnel_import;
 {% else %}
         import all;
 {% endif %}
@@ -140,9 +213,9 @@ protocol bgp bgp_to_node{{ dest_index }} {
     local {{ tunnel_local_address }} as {{ as_prefix }}{{ index }};
     neighbor {{ tunnel_dest_address }} as {{ as_prefix }}{{ dest_index }};
     ipv4 {
-        export filter nexthops;
+        export filter tunnel_export;
 {% if enable_path_isolation %}
-        import filter path_isolation_import;
+        import filter tunnel_import;
 {% else %}
         import all;
 {% endif %}
@@ -162,9 +235,9 @@ protocol bgp bgp_to_node{{ dest_index }}_2 {
     local {{ tunnel_local_address_2 }} as {{ as_prefix }}{{ index }};
     neighbor {{ tunnel_dest_address_2 }} as {{ as_prefix }}{{ dest_index }};
     ipv4 {
-        export filter nexthops;
+        export filter tunnel_export;
 {% if enable_path_isolation %}
-        import filter path_isolation_import;
+        import filter tunnel_import;
 {% else %}
         import all;
 {% endif %}
@@ -194,9 +267,9 @@ protocol bgp bgp_from_client_{{ loop.index }} {
     local {{ client_interface_1 }} as {{ local_as }};
     neighbor {{ client_ip }} as {{ client_as }};
     ipv4 {
-        export filter nexthops;
+        export filter tunnel_export;
 {% if enable_path_isolation %}
-        import filter path_isolation_import;
+        import filter tunnel_import;
 {% else %}
         import all;
 {% endif %}
@@ -217,9 +290,9 @@ protocol bgp bgp_from_client_{{ loop.index }}_2 {
     local {{ client_interface_2 }} as {{ local_as }};
     neighbor {{ client_ip }} as {{ client_as }};
     ipv4 {
-        export filter nexthops;
+        export filter tunnel_export;
 {% if enable_path_isolation %}
-        import filter path_isolation_import;
+        import filter tunnel_import;
 {% else %}
         import all;
 {% endif %}
@@ -236,10 +309,15 @@ protocol bgp bgp_from_client_{{ loop.index }}_2 {
 {% endif %}
 {% endif %}
 
+{# ============================================== #}
+{# CALICO/WORKER BGP SESSIONS - ECMP enabled     #}
+{# ============================================== #}
+
 {#
-  BGP to/from Kubernetes Workers:
-  When using Calico with BGPPeer resources, workers connect TO BIRD (passive mode).
-  Only create active BGP sessions from BIRD to workers if explicitly enabled.
+  BGP to/from Kubernetes Workers (Calico):
+  - Uses ECMP filters (equal metrics) so Calico can load-balance
+  - Workers connect TO BIRD in passive mode (Calico BGPPeer)
+  - Set enable_bird_to_worker_bgp=true for active mode
 #}
 {% set enable_worker_bgp = enable_bird_to_worker_bgp | default(false) %}
 {% if enable_worker_bgp %}
@@ -260,12 +338,8 @@ protocol bgp bgp_to_worker_{{ worker.split('.')[-1] }} {
     local {{ local_ip }} as {{ local_as }};
     neighbor {{ worker }} as {{ remote_as }};
     ipv4 {
-        export filter nexthops;
-{% if enable_path_isolation %}
-        import filter path_isolation_import;
-{% else %}
-        import all;
-{% endif %}
+        export filter ecmp_export;
+        import filter ecmp_import;
         next hop self;
     };
     direct;
@@ -287,12 +361,8 @@ protocol bgp bgp_from_worker_{{ worker_ip.split('.')[-1] }} {
     local {{ local_ip }} as {{ local_as }};
     neighbor {{ worker_ip }} as {{ worker_as }};
     ipv4 {
-        export filter nexthops;
-{% if enable_path_isolation %}
-        import filter path_isolation_import;
-{% else %}
-        import all;
-{% endif %}
+        export filter ecmp_export;
+        import filter ecmp_import;
         next hop self;
     };
     passive;
