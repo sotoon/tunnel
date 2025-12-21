@@ -118,45 +118,23 @@
     main_interface: "{{ default_route.stdout.split(' ')[4] }}"
   when: tunnel_type == "dest"
 
-- name: Get all interface IPs
-  become: true
-  command: ip -4 -o addr show
-  register: interface_ips
-  when: tunnel_type == "dest"
-
-- name: Set fact if any IP is in 10.0.0.0/24
-  set_fact:
-    is_10_0_range: "{{ interface_ips.stdout_lines | select('search', '\\s10\\.0\\.0\\.') | list | length > 0 }}"
-  when: tunnel_type == "dest"
-
-- name: Get all interface IPs for machines
-  become: true
-  command: ip -4 -o addr show
-  register: interface_ips_machine
-  when: tunnel_type == "src"
-
-- name: Set fact if any IP is in 10.0.0.0/16 for machines
-  set_fact:
-    is_10_0_range: "{{ interface_ips_machine.stdout_lines | select('search', '\\s10\\.0\\.') | list | length > 0 }}"
-  when: tunnel_type == "src"
-
 - name: Ensure iptables-persistent is installed
   become: true
   apt:
     name: iptables-persistent
     state: present
-  when: ansible_os_family == "Debian" and is_10_0_range | default(false)
+  when: ansible_os_family == "Debian"
 
 - name: Get default route interface for machines
   become: true
   command: ip route show default
   register: default_route_machine
-  when: tunnel_type == "src" and is_10_0_range | default(false)
+  when: tunnel_type == "src"
 
 - name: Extract main interface from default route for machines
   set_fact:
     main_interface_machine: "{{ default_route_machine.stdout.split(' ')[4] }}"
-  when: tunnel_type == "src" and is_10_0_range | default(false)
+  when: tunnel_type == "src"
 
 - name: Ensure MASQUERADE rule exists on main interface for machines
   become: true
@@ -166,7 +144,7 @@
     out_interface: "{{ main_interface_machine }}"
     jump: MASQUERADE
     state: present
-  when: tunnel_type == "src" and is_10_0_range | default(false)
+  when: tunnel_type == "src"
 
 - name: Ensure MASQUERADE rule exists on main interface for engines
   become: true
@@ -176,10 +154,10 @@
     out_interface: "{{ main_interface }}"
     jump: MASQUERADE
     state: present
-  when: tunnel_type == "dest" and is_10_0_range | default(false)
+  when: tunnel_type == "dest"
 
 - name: Save iptables rules
   become: true
   command: netfilter-persistent save
-  when: ansible_os_family == "Debian" and is_10_0_range | default(false)
+  when: ansible_os_family == "Debian"
   changed_when: false
