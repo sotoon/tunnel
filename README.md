@@ -1,20 +1,29 @@
-# WireGuard Tunnel Configuration
+# Tunnel Configuration - VXLAN, BIRD, and Calico
 
-This Ansible playbook sets up WireGuard tunnels with support for multiple WireGuard interfaces per physical network interface.
+This Ansible playbook sets up network tunnels and multi-cluster connectivity using VXLAN tunnels, BIRD BGP routing, and Calico integration.
 
 ## Features
 
-- **Dynamic Interface Configuration**: Configure different physical interfaces per host
-- **Multiple WireGuard per Interface**: Support for multiple WireGuard tunnels per physical interface
-- **Flexible Interface Names**: Support for any interface naming convention (eth, ens, etc.)
-- **Automatic IP Range Management**: Each physical interface gets its own IP range
-- **Multipath Routing**: Load balancing across multiple WireGuard tunnels
+- **VXLAN Tunnels**: Virtual Extensible LAN tunnels for Layer 2 connectivity across networks
+- **BGP Routing**: BIRD-based dynamic routing with support for ECMP and path isolation
+- **Multi-Cluster Kubernetes**: Calico integration for cross-cluster pod and service connectivity
+- **Dynamic Interface Configuration**: Support for any interface naming convention (eth0, ens3, etc.)
+- **Comprehensive Network Tuning**: Extensive sysctl configuration for optimal performance
+- **ECMP Support**: Equal-cost multipath routing for load balancing
+
+## Project Structure
+
+The playbook consists of three main components:
+
+1. **VXLAN Role**: Creates VXLAN tunnels between virtual machines
+2. **BIRD Role**: Configures BGP routing for dynamic route propagation
+3. **Calico Role**: Integrates Kubernetes clusters via BGP peering
 
 ## Configuration
 
 ### Inventory Configuration
 
-Each host can define its physical interfaces and the number of WireGuard tunnels per interface:
+Each host in a VXLAN tunnel group requires:
 
 ```yaml
 all:
@@ -25,142 +34,125 @@ all:
       public_ip: your-public-ip
       physical_interfaces:
         - name: eth0
-          wg_count: 4
-        - name: eth1
-          wg_count: 4
+          ip: 192.168.1.10/24
     engine1:
       ansible_host: peer-server-ip
       tunnel_type: dest
       public_ip: peer-public-ip
       physical_interfaces:
-        - name: eth0
-          wg_count: 4
-        - name: eth1
-          wg_count: 4
+        - name: ens3
+          ip: 10.0.0.5/24
+  children:
+    vxlan_all:
+      hosts:
+        machine1:
+        engine1:
 ```
 
-### Interface Naming
+### Global Variables
 
-The system supports any interface naming convention:
-
-- `eth0`, `eth1` (traditional)
-- `ens18`, `ens19` (systemd predictable naming)
-- `enp0s3`, `enp0s8` (PCI-based naming)
-- Any other interface name
-
-### IP Range Configuration
-
-Each physical interface gets its own IP range to avoid conflicts:
+In `group_vars/all/tunnel.yaml`:
 
 ```yaml
-interface_base_ranges:
-  eth0:
-    machine_range: 10.0.0.0/24
-    engine_range: 10.10.0.0/24
-  eth1:
-    machine_range: 10.1.0.0/24
-    engine_range: 10.11.0.0/24
+# VXLAN configuration
+vxlan_ip_range: 192.168.234
+vxlan_cidr: 24
+
+# ECMP and BGP settings
+enable_ecmp: true
+enable_path_isolation: true
 ```
-
-## WireGuard Interface Generation
-
-The system automatically generates WireGuard interfaces based on the configuration:
-
-- **Interface Naming**: `wg0`, `wg1`, `wg2`, etc.
-- **Port Assignment**: Starting from `wireguard_port` (default: 51820)
-- **IP Assignment**: Each interface gets a unique IP in the tunnel range
-
-### Example with 2 physical interfaces, 4 WireGuard each:
-
-| Physical Interface | WireGuard Interface | Port  | IP Range         |
-| ------------------ | ------------------- | ----- | ---------------- |
-| eth0               | wg0                 | 51820 | 172.16.234.1/24  |
-| eth0               | wg1                 | 51821 | 172.16.234.11/24 |
-| eth0               | wg2                 | 51822 | 172.16.234.21/24 |
-| eth0               | wg3                 | 51823 | 172.16.234.31/24 |
-| eth1               | wg4                 | 51824 | 172.16.234.41/24 |
-| eth1               | wg5                 | 51825 | 172.16.234.51/24 |
-| eth1               | wg6                 | 51826 | 172.16.234.61/24 |
-| eth1               | wg7                 | 51827 | 172.16.234.71/24 |
 
 ## Usage
 
 1. **Configure your inventory** in `inventory/your-environment/hosts.yml`
-2. **Update interface ranges** in `group_vars/all/tunnel.yaml` if needed
+2. **Update global variables** in `group_vars/all/tunnel.yaml` and `group_vars/all/kube.yaml`
 3. **Run the playbook**:
 
 ```bash
+# Deploy everything
 ansible-playbook -i inventory/your-environment/hosts.yml site.yml
+
+# Deploy only VXLAN tunnels
+ansible-playbook -i inventory/your-environment/hosts.yml site.yml --tags vxlan
+
+# Deploy only BIRD BGP
+ansible-playbook -i inventory/your-environment/hosts.yml site.yml --tags bird
+
+# Deploy only Calico configuration
+ansible-playbook -i inventory/your-environment/hosts.yml site.yml --tags calico
 ```
 
-## Advanced Configuration
+## Roles Overview
 
-### Custom Interface Ranges
+### VXLAN Role
 
-You can define custom IP ranges for different physical interfaces:
+Creates VXLAN tunnels with comprehensive sysctl tuning for optimal performance. See [roles/vxlan/README.md](roles/vxlan/README.md) for details.
 
-```yaml
-interface_base_ranges:
-  eth0:
-    machine_range: 10.0.0.0/24
-    engine_range: 10.10.0.0/24
-  ens18:
-    machine_range: 10.2.0.0/24
-    engine_range: 10.12.0.0/24
-```
+### BIRD Role
 
-### Different WireGuard Counts
+Configures BGP routing with support for ECMP and path isolation. See [roles/bird/README.md](roles/bird/README.md) for details.
 
-You can have different numbers of WireGuard tunnels per interface:
+### Calico Role
 
-```yaml
-physical_interfaces:
-  - name: eth0
-    wg_count: 2
-  - name: eth1
-    wg_count: 6
-```
-
-This will create:
-
-- 2 WireGuard interfaces on eth0 (wg0, wg1)
-- 6 WireGuard interfaces on eth1 (wg2, wg3, wg4, wg5, wg6, wg7)
+Integrates Kubernetes clusters via BGP peering. See [roles/calico/README.md](roles/calico/README.md) for details.
 
 ## Troubleshooting
 
-### Check WireGuard Status
+### Check VXLAN Tunnel Status
 
 ```bash
-# List all WireGuard interfaces
-wg show
+# View tunnel configuration
+ip tunnel show
 
-# Check interface status
-ip a show wg0
-ip a show wg1
-# ... etc
+# Check VXLAN interface
+ip addr show vxlan-eth0
+
+# Test connectivity
+ping 192.168.234.2  # Replace with peer tunnel IP
 ```
 
-### Check Routing
+### Check BIRD BGP Status
 
 ```bash
-# Check multipath routes
-ip route show | grep 172.16.234
+# View BGP protocols
+sudo birdc show protocols
 
-# Check specific interface routes
-ip route show dev wg0
+# View BGP routes
+sudo birdc show route
+```
+
+### Check Calico Status
+
+```bash
+# Check BGP peers
+calicoctl node status
+
+# View routes
+calicoctl get bgp routes
 ```
 
 ### Logs
 
 ```bash
-# Check WireGuard service status
-systemctl status wg-quick@wg0
-journalctl -u wg-quick@wg0
+# VXLAN/netplan logs
+journalctl -u networking
+
+# BIRD logs
+journalctl -u bird
+
+# Calico logs (on Kubernetes nodes)
+kubectl logs -n kube-system -l k8s-app=calico-node
 ```
 
-## Security Notes
+## Documentation
 
-- Private keys are stored with 600 permissions
-- Public keys are stored with 644 permissions
-- WireGuard configs are stored with 600 permissions
-- All keys are generated per-interface for security isolation
+For detailed documentation on each role:
+
+- [VXLAN Role](roles/vxlan/README.md) - VXLAN tunnel configuration
+- [BIRD Role](roles/bird/README.md) - BGP routing configuration
+- [Calico Role](roles/calico/README.md) - Kubernetes multi-cluster integration
+- [ECMP Role](roles/ecmp/README.md) - ECMP routing support
+- [Workers ECMP Role](roles/workers-ecmp/README.md) - ECMP on Kubernetes workers
+- [Dynamic Route Role](roles/dynamic-route/README.md) - Dynamic routing for clients
+- [Metrics Role](roles/metrics/README.md) - Tunnel monitoring

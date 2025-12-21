@@ -1,12 +1,12 @@
 # Calico Role - Level 3: Kubernetes Multi-Cluster Connectivity
 
-The Calico role configures BGP peering between Kubernetes clusters and GRE tunnel endpoints, enabling pod-to-pod and service-to-service communication across multiple geographically distributed Kubernetes clusters.
+The Calico role configures BGP peering between Kubernetes clusters and tunnel endpoints (VXLAN, WireGuard, or GRE), enabling pod-to-pod and service-to-service communication across multiple geographically distributed Kubernetes clusters.
 
 ## Overview
 
-This role is the third and final level of connectivity, building on GRE tunnels (Level 1) and BIRD BGP routing (Level 2) to connect Kubernetes clusters. It configures Calico's BGP capabilities to peer with tunnel endpoints, allowing pods in one cluster to communicate with pods in another cluster seamlessly.
+This role is the third and final level of connectivity, building on tunnel configuration (Level 1, typically VXLAN) and BIRD BGP routing (Level 2) to connect Kubernetes clusters. It configures Calico's BGP capabilities to peer with tunnel endpoints, allowing pods in one cluster to communicate with pods in another cluster seamlessly.
 
-**Prerequisites**: Requires both [GRE role](../gre/README.md) and [BIRD role](../bird/README.md) to be configured first.
+**Prerequisites**: Requires both tunnel configuration (typically [VXLAN role](../vxlan/README.md)) and [BIRD role](../bird/README.md) to be configured first.
 
 ## What This Role Does
 
@@ -21,7 +21,7 @@ This role is the third and final level of connectivity, building on GRE tunnels 
 ## Requirements
 
 - **Prerequisites**:
-  - Level 1 (GRE tunnels) configured
+  - Level 1 (VXLAN/WireGuard/GRE tunnels) configured
   - Level 2 (BIRD BGP) configured
 - **Kubernetes**: Two or more clusters with Calico CNI
 - **Calico**: Must be installed and operational
@@ -91,16 +91,16 @@ KUBE_WORKERS_2:
         │ BGP Peering (AS 61012 ↔ AS 61113)
         │
 ┌───────▼────────────────────────────────────────────────────┐
-│         GRE Tunnel Endpoint (machine1)                    │
+│         Tunnel Endpoint (machine1)                        │
 │         AS 61113 - BIRD BGP Router                        │
-│         Tunnel IP: 172.16.234.1                           │
+│         Tunnel IP: 192.168.234.1 (VXLAN)                  │
 └───────┬────────────────────────────────────────────────────┘
-        │ GRE Tunnel + BGP over Tunnel
+        │ VXLAN/WireGuard/GRE Tunnel + BGP over Tunnel
         │ (AS 61113 ↔ AS 61113)
 ┌───────▼────────────────────────────────────────────────────┐
-│         GRE Tunnel Endpoint (engine1)                     │
+│         Tunnel Endpoint (engine1)                         │
 │         AS 61113 - BIRD BGP Router                        │
-│         Tunnel IP: 172.16.234.2                           │
+│         Tunnel IP: 192.168.234.2 (VXLAN)                  │
 └───────┬────────────────────────────────────────────────────┘
         │ BGP Peering (AS 61113 ↔ AS 62012)
         │
@@ -133,13 +133,13 @@ AS Number = 6{worker_index}012
 **Tunnel Endpoints** (configured by BIRD role):
 
 ```
-AS Number = 6{gre_index}{worker_index}13
+AS Number = 6{group_num}{workers_index}13
 ```
 
-- gre1, cluster1: AS 61113
-- gre1, cluster2: AS 61213
-- gre2, cluster1: AS 62113
-- gre2, cluster2: AS 62213
+- vxlan1/wireguard1/gre1, cluster1: AS 61113
+- vxlan1/wireguard1/gre1, cluster2: AS 61213
+- vxlan2/wireguard2/gre2, cluster1: AS 62113
+- vxlan2/wireguard2/gre2, cluster2: AS 62213
 
 ## Usage
 
@@ -205,7 +205,7 @@ spec:
 
 Main orchestration task:
 
-- Gathers facts from all GRE hosts
+- Gathers facts from all tunnel hosts
 - Processes each worker type (cluster)
 - Creates BGP peer configurations
 
@@ -220,7 +220,7 @@ For each Kubernetes cluster:
 
 ### 3. BGP Peer Creation
 
-For each combination of GRE tunnel × cluster:
+For each combination of tunnel group × cluster:
 
 - Determines correct AS number
 - Identifies tunnel endpoint IP
@@ -585,7 +585,9 @@ kubectl label nodes worker1 bgp-peer=external
 
 ## Integration with Other Roles
 
-- **[GRE Role](../gre/README.md)**: Required - provides tunnel infrastructure
+- **[VXLAN Role](../vxlan/README.md)**: Primary tunnel type - provides VXLAN tunnel infrastructure
+- **[WireGuard Role](../wireguard/README.md)**: Alternative tunnel type - provides encrypted tunnels
+- **[GRE Role](../gre/README.md)**: Alternative tunnel type - provides GRE tunnels
 - **[BIRD Role](../bird/README.md)**: Required - provides BGP routing between tunnels
 
 ## Files Modified
@@ -595,7 +597,7 @@ None on the target hosts. All changes are applied to Kubernetes clusters via API
 ## Kubernetes Resources Created
 
 - `BGPConfiguration`: One per cluster
-- `BGPPeer`: Multiple per cluster (one per tunnel endpoint × GRE group)
+- `BGPPeer`: Multiple per cluster (one per tunnel endpoint × tunnel group)
 
 ## Idempotency
 
@@ -608,7 +610,7 @@ This role is idempotent:
 ## Related Documentation
 
 - [Main README](../../README.md)
-- [GRE Role Documentation](../gre/README.md) - Level 1 prerequisite
+- [VXLAN Role Documentation](../vxlan/README.md) - Level 1 primary prerequisite
 - [BIRD Role Documentation](../bird/README.md) - Level 2 prerequisite
 - [Calico BGP Documentation](https://docs.tigera.io/calico/latest/networking/configuring/bgp)
 - [Project Calico](https://www.projectcalico.org/)

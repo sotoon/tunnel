@@ -8,11 +8,16 @@ This role creates VXLAN tunnels with dual interface support, allowing you to hav
 
 ## What This Role Does
 
-1. **Installs Prerequisites**: Ensures `iproute2` package is installed
-2. **Enables IP Forwarding**: Configures `net.ipv4.ip_forward=1` for packet routing
-3. **Creates Dual VXLAN Tunnels**: Generates netplan configuration for VXLAN interfaces on both eth0 and eth1
+1. **Installs Prerequisites**: Ensures `iproute2` and `iptables-persistent` packages are installed
+2. **Configures System Parameters**: Sets comprehensive sysctl parameters for optimal network performance including:
+   - IP forwarding and multipath routing
+   - Reverse path filtering (rp_filter)
+   - Netfilter conntrack settings
+   - TCP/IP memory and buffer tuning
+   - Network queue limits
+3. **Creates VXLAN Tunnels**: Generates netplan configuration for VXLAN interfaces with dynamic interface name support
 4. **Configures Networking**: Applies netplan changes to activate tunnels
-5. **Sets up NAT**: Configures MASQUERADE rules for 10.0.0.0/16 networks (when tunnel_type is "dest")
+5. **Sets up NAT**: Configures MASQUERADE rules on main interface for both src and dest hosts
 
 ## Requirements
 
@@ -20,7 +25,8 @@ This role creates VXLAN tunnels with dual interface support, allowing you to hav
 - **Network**: Public IP addresses for tunnel endpoints
 - **Firewall**: Allow VXLAN traffic (UDP port 4789)
 - **Privileges**: Root/sudo access
-- **Interfaces**: Machine should have eth0 and eth1 interfaces
+- **Interfaces**: Must define `physical_interfaces` in inventory with at least one interface
+- **Python3**: Required for network range calculations
 
 ## Configuration
 
@@ -67,29 +73,16 @@ vxlan_cidr: 24 # CIDR prefix length
 
 VXLAN tunnel IPs are automatically assigned based on the host's index in the inventory:
 
-### Eth0 VXLAN Tunnels
-
 - Host 1: `{vxlan_ip_range}.1/{vxlan_cidr}` → `192.168.234.1/24`
 - Host 2: `{vxlan_ip_range}.2/{vxlan_cidr}` → `192.168.234.2/24`
 
-### Eth1 VXLAN Tunnels
-
-- Host 1: `{vxlan_ip_range}.101/{vxlan_cidr}` → `192.168.234.101/24`
-- Host 2: `{vxlan_ip_range}.102/{vxlan_cidr}` → `192.168.234.102/24`
+The interface name is dynamically determined from `physical_interfaces[0].name` in the inventory.
 
 ## VXLAN ID Assignment
 
-VXLAN IDs are automatically assigned to avoid conflicts:
+VXLAN IDs are automatically assigned:
 
-### Eth0 VXLAN IDs
-
-- Host 1: VXLAN ID 101
-- Host 2: VXLAN ID 102
-
-### Eth1 VXLAN IDs
-
-- Host 1: VXLAN ID 201
-- Host 2: VXLAN ID 202
+- All VXLAN tunnels use VXLAN ID 101
 
 ## Usage
 
@@ -113,9 +106,11 @@ ansible-playbook -i inventory/cafe/hosts.yml site.yml --tags vxlan
 
 ## Generated Configuration
 
-The role creates two netplan configuration files on each host:
+The role creates netplan configuration files based on the physical interface name:
 
-### `/etc/netplan/90-vxlan-eth0.yaml`
+### `/etc/netplan/90-vxlan-{interface_name}.yaml`
+
+Example for eth0:
 
 ```yaml
 network:
@@ -123,69 +118,51 @@ network:
   tunnels:
     vxlan-eth0:
       mode: vxlan
-      local: 192.168.1.10 # Local eth0 interface IP
+      local: 192.168.1.10 # Local physical interface IP
       remote: 87.247.168.200 # Peer's public IP
       id: 101 # VXLAN ID
       port: 4789 # VXLAN port
       ttl: 255
+      mtu: 1450
       addresses:
         - 192.168.234.1/24 # Tunnel IP
+      routes:
+        - to: 10.0.0.0/24 # Peer network range
+          via: 192.168.234.2 # Remote tunnel IP
+          mtu: 1450
 ```
 
-### `/etc/netplan/90-vxlan-eth1.yaml`
-
-```yaml
-network:
-  version: 2
-  tunnels:
-    vxlan-eth1:
-      mode: vxlan
-      local: 192.168.2.10 # Local eth1 interface IP
-      remote: 87.247.168.200 # Peer's public IP
-      id: 201 # VXLAN ID
-      port: 4789 # VXLAN port
-      ttl: 255
-      addresses:
-        - 192.168.234.101/24 # Tunnel IP
-```
+The interface name is dynamically determined from `physical_interfaces[0].name` in the inventory.
 
 ## Network Architecture
 
-### Dual Interface VXLAN Example
+### Single VXLAN Tunnel Example
 
 ```
 ┌─────────────────────────────────┐                               ┌─────────────────┐
 │           machine1              │                               │    engine1      │
 │                                 │                               │                 │
-│ eth0: 192.168.1.10             │    VXLAN Tunnel 1 (ID: 101)  │ Public IP:      │
+│ eth0: 192.168.1.10             │    VXLAN Tunnel (ID: 101)    │ Public IP:      │
 │ vxlan-eth0: 192.168.234.1/24   │◄─────────────────────────────►│ 87.247.168.200  │
 │                                 │                               │                 │
-│ eth1: 192.168.2.10             │    VXLAN Tunnel 2 (ID: 201)  │ vxlan-ens3:     │
-│ vxlan-eth1: 192.168.234.101/24 │◄─────────────────────────────►│ 192.168.234.2/24│
+│                                 │                               │ ens3: 10.0.0.5  │
+│                                 │                               │ vxlan-eth0:     │
+│                                 │                               │ 192.168.234.2/24│
 └─────────────────────────────────┘                               └─────────────────┘
      tunnel_type: src                                                 tunnel_type: dest
 ```
 
-### Multiple Tunnels Example
-
-```
-Site A (src)                                       Site B (dest)
-┌─────────────┐                                   ┌─────────────┐
-│  machine1   │───── VXLAN Tunnel 1 (eth0) ─────►│   engine1   │
-│192.168.234.1│                                   │192.168.234.2│
-│192.168.234.101│───── VXLAN Tunnel 2 (eth1) ─────►│192.168.234.102│
-└─────────────┘                                   └─────────────┘
-```
+The interface names (eth0, ens3, etc.) are dynamically determined from the inventory configuration.
 
 ## NAT Configuration
 
-For hosts with `tunnel_type: dest` and interfaces in the 10.0.0.0/16 range, the role automatically configures MASQUERADE:
+The role automatically configures MASQUERADE rules on the main interface for both `src` and `dest` hosts:
 
 ```bash
 iptables -t nat -A POSTROUTING -o {main_interface} -j MASQUERADE
 ```
 
-This allows traffic from the tunnel to be NAT'd when exiting through the main interface.
+The main interface is dynamically determined from the default route using `ip route show default`.
 
 ## Tasks Breakdown
 
@@ -201,11 +178,12 @@ Determines:
 
 Performs:
 
-- Package installation (iproute2)
-- IP forwarding enablement
-- Dual netplan configuration generation (eth0 and eth1)
+- Package installation (iproute2, iptables-persistent)
+- Comprehensive sysctl configuration (see Sysctl Configuration section)
+- Dynamic interface name detection from inventory
+- Netplan configuration generation with dynamic interface names
 - Network activation
-- NAT/MASQUERADE setup (for dest hosts in 10.0.0.0/16)
+- NAT/MASQUERADE setup on main interface for both src and dest hosts
 
 ## Verification
 
@@ -240,13 +218,30 @@ ping -s 1400 192.168.234.102
 ping -i 0.5 192.168.234.2
 ```
 
-### Check IP Forwarding
+### Check Sysctl Configuration
 
 ```bash
 # Verify IP forwarding is enabled
 sysctl net.ipv4.ip_forward
-
 # Should return: net.ipv4.ip_forward = 1
+
+# Verify multipath routing settings
+sysctl net.ipv4.fib_multipath_hash_policy
+sysctl net.ipv4.fib_multipath_use_neigh
+
+# Verify rp_filter settings (should be 0 for VXLAN)
+sysctl net.ipv4.conf.all.rp_filter
+sysctl net.ipv4.conf.default.rp_filter
+sysctl net.ipv4.conf.{interface_name}.rp_filter
+sysctl net.ipv4.conf.vxlan-{interface_name}.rp_filter
+
+# Check conntrack settings
+sysctl net.netfilter.nf_conntrack_max
+sysctl net.netfilter.nf_conntrack_tcp_timeout_established
+
+# Verify TCP/IP buffer settings
+sysctl net.core.rmem_max net.core.wmem_max
+sysctl net.ipv4.tcp_rmem net.ipv4.tcp_wmem
 ```
 
 ### Check NAT Rules
@@ -308,24 +303,21 @@ sudo ip link set vxlan-eth0 up
 sudo ip link set vxlan-eth1 up
 ```
 
-### Issue: Only One Interface Working
+### Issue: Interface Name Mismatch
 
-**Symptoms**: eth0 tunnel works but eth1 doesn't (or vice versa)
+**Symptoms**: VXLAN interface not created or wrong interface name
 
 **Solutions**:
 
 ```bash
-# Check if eth1 interface exists and has IP
-ip addr show eth1
+# Check physical interface name from inventory
+# Verify it matches actual interface on the host
 
-# Verify eth1 has a valid IP address
-ip -4 addr show eth1
+# List available interfaces
+ip addr show
 
-# Check if eth1 is up
-ip link show eth1
-
-# Bring up eth1 if needed
-sudo ip link set eth1 up
+# Check physical_interfaces configuration in inventory
+# Ensure physical_interfaces[0].name matches actual interface name
 ```
 
 ### Issue: IP Forwarding Not Working
@@ -406,20 +398,58 @@ sudo iptables -A INPUT -p udp --dport 4789 -s {peer_public_ip} -j ACCEPT
 sudo iptables -A INPUT -p udp --dport 4789 -j DROP
 ```
 
+## Sysctl Configuration
+
+The role configures comprehensive sysctl parameters for optimal VXLAN performance:
+
+### IP Forwarding and Multipath Routing
+
+- `net.ipv4.ip_forward = 1` - Enables IP packet forwarding
+- `net.ipv4.fib_multipath_hash_policy = 1` - Uses Layer 4 (port) information for multipath hashing
+- `net.ipv4.fib_multipath_use_neigh = 1` - Uses neighbor status for multipath selection
+
+### Reverse Path Filtering
+
+- `net.ipv4.conf.all.rp_filter = 0` - Disables rp_filter for all interfaces
+- `net.ipv4.conf.default.rp_filter = 0` - Disables rp_filter for default interface
+- `net.ipv4.conf.{interface_name}.rp_filter = 0` - Disables rp_filter for physical interface (dynamic)
+- `net.ipv4.conf.vxlan-{interface_name}.rp_filter = 0` - Disables rp_filter for VXLAN interface (dynamic)
+
+### Netfilter Conntrack
+
+- `net.netfilter.nf_conntrack_max = 1048576` - Maximum number of connection tracking entries
+- `net.netfilter.nf_conntrack_tcp_timeout_established = 7200` - TCP established timeout (2 hours)
+- `net.netfilter.nf_conntrack_tcp_timeout_time_wait = 30` - TCP time wait timeout
+- `net.netfilter.nf_conntrack_tcp_timeout_close_wait = 60` - TCP close wait timeout
+- `net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 30` - TCP fin wait timeout
+- `net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30` - TCP SYN receive timeout
+- `net.netfilter.nf_conntrack_generic_timeout = 120` - Generic connection timeout
+
+### TCP/IP Memory and Buffers
+
+- `net.ipv4.ip_local_port_range = 1024 65535` - Local port range
+- `net.ipv4.tcp_tw_reuse = 1` - Reuse TIME_WAIT sockets
+- `net.core.rmem_max = 16777216` - Maximum receive buffer size (16MB)
+- `net.core.wmem_max = 16777216` - Maximum write buffer size (16MB)
+- `net.core.rmem_default = 262144` - Default receive buffer size (256KB)
+- `net.core.wmem_default = 262144` - Default write buffer size (256KB)
+- `net.ipv4.tcp_rmem = 4096 131072 16777216` - TCP receive buffer min/default/max
+- `net.ipv4.tcp_wmem = 4096 131072 16777216` - TCP write buffer min/default/max
+- `net.ipv4.tcp_mem = 1048576 1572864 2097152` - TCP memory pressure thresholds
+
+### Network Queue Limits
+
+- `net.core.netdev_max_backlog = 250000` - Maximum number of packets queued on input
+- `net.core.somaxconn = 65535` - Maximum number of pending connection requests
+- `net.ipv4.tcp_max_syn_backlog = 65535` - Maximum number of SYN backlog requests
+
+All sysctls are persisted to `/etc/sysctl.conf` and applied immediately.
+
 ## Performance Tuning
 
 ### MTU Optimization
 
-VXLAN adds 50 bytes of overhead. Optimize MTU to avoid fragmentation:
-
-```yaml
-# In netplan configuration
-tunnels:
-  vxlan-eth0:
-    mtu: 1450 # 1500 - 50 bytes VXLAN overhead
-  vxlan-eth1:
-    mtu: 1450
-```
+VXLAN adds 50 bytes of overhead. The role configures MTU 1450 by default to avoid fragmentation.
 
 ### TCP MSS Clamping
 
@@ -457,10 +487,9 @@ This role is standalone but provides the foundation for:
 
 ## Files Modified
 
-- `/etc/netplan/90-vxlan-eth0.yaml` - VXLAN tunnel configuration for eth0
-- `/etc/netplan/90-vxlan-eth1.yaml` - VXLAN tunnel configuration for eth1
-- `/etc/sysctl.conf` - IP forwarding configuration
-- `/etc/iptables/rules.v4` - NAT rules (implicitly via iptables module)
+- `/etc/netplan/90-vxlan-{interface_name}.yaml` - VXLAN tunnel configuration (interface name is dynamic)
+- `/etc/sysctl.conf` - Comprehensive sysctl configuration (see Sysctl Configuration section)
+- `/etc/iptables/rules.v4` - NAT rules (via netfilter-persistent)
 
 ## Idempotency
 

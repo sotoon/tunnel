@@ -1,12 +1,12 @@
 # BIRD Role - Level 2: BGP Route Propagation
 
-The BIRD role configures BIRD2 (BIRD Internet Routing Daemon) to propagate routes between machines using BGP (Border Gateway Protocol). This enables dynamic routing, automatic failover, and load balancing across multiple GRE tunnels.
+The BIRD role configures BIRD2 (BIRD Internet Routing Daemon) to propagate routes between machines using BGP (Border Gateway Protocol). This enables dynamic routing, automatic failover, and load balancing across multiple tunnel types (VXLAN, WireGuard, or GRE).
 
 ## Overview
 
-This role builds on Level 1 (GRE tunnels) to add intelligent route propagation. It's useful when you have multiple paths between sites and want automatic route selection based on priority, load balancing, or failover scenarios.
+This role builds on Level 1 (tunnel configuration) to add intelligent route propagation. It supports VXLAN (primary), WireGuard, and GRE tunnels. It's useful when you have multiple paths between sites and want automatic route selection based on priority, load balancing, or failover scenarios.
 
-**Prerequisites**: Requires [GRE role](../gre/README.md) to be configured first.
+**Prerequisites**: Requires tunnel configuration (typically [VXLAN role](../vxlan/README.md)) to be configured first.
 
 ## What This Role Does
 
@@ -20,7 +20,7 @@ This role builds on Level 1 (GRE tunnels) to add intelligent route propagation. 
 
 ## Requirements
 
-- **Prerequisites**: Level 1 (GRE tunnels) must be configured
+- **Prerequisites**: Level 1 (VXLAN/WireGuard/GRE tunnels) must be configured
 - **Operating System**: Ubuntu (uses apt)
 - **Network**: BGP port access (TCP 179)
 - **Privileges**: Root/sudo access
@@ -29,11 +29,11 @@ This role builds on Level 1 (GRE tunnels) to add intelligent route propagation. 
 
 ### Inventory Variables
 
-The same inventory used for GRE role is used here. BIRD automatically discovers:
+The same inventory used for tunnel configuration is used here. BIRD automatically discovers:
 
-- Tunnel peers from GRE groups
-- Local and remote tunnel IPs
-- Network subnets to advertise
+- Tunnel peers from tunnel groups (vxlan1, wireguard1, gre1, etc.)
+- Local and remote tunnel IPs based on tunnel type
+- Network subnets to advertise from physical_interfaces
 
 ### Global Variables
 
@@ -59,15 +59,15 @@ BIRD uses a dynamic AS number scheme based on tunnel group and worker index:
 **For Tunnel Endpoints**:
 
 ```
-AS Number = 6{gre_index}{worker_index}13
+AS Number = 6{group_num}{workers_index}13
 ```
 
 Examples:
 
-- gre1, worker1: AS 61113
-- gre1, worker2: AS 61213
-- gre2, worker1: AS 62113
-- gre2, worker2: AS 62213
+- vxlan1/wireguard1/gre1, cluster1: AS 61113
+- vxlan1/wireguard1/gre1, cluster2: AS 61213
+- vxlan2/wireguard2/gre2, cluster1: AS 62113
+- vxlan2/wireguard2/gre2, cluster2: AS 62213
 
 **For Kubernetes Workers**:
 
@@ -100,14 +100,14 @@ Each tunnel endpoint establishes:
 ┌───────▼──────────────────────────▼──────────────────────────┐
 │  machine1 (tunnel endpoint)                                 │
 │  AS 61113                                                   │
-│  Tunnel IP: 172.16.234.1                                    │
+│  Tunnel IP: 192.168.234.1 (VXLAN)                           │
 └───────┬─────────────────────────────────────────────────────┘
-        │ BGP over GRE Tunnel
+        │ BGP over VXLAN/WireGuard/GRE Tunnel
         │
 ┌───────▼─────────────────────────────────────────────────────┐
 │  engine1 (tunnel endpoint)                                  │
 │  AS 61113                                                   │
-│  Tunnel IP: 172.16.234.2                                    │
+│  Tunnel IP: 192.168.234.2 (VXLAN)                           │
 └───────┬──────────────────────────┬──────────────────────────┘
         │ BGP                      │ BGP
         │                          │
@@ -120,68 +120,41 @@ Each tunnel endpoint establishes:
 
 ## Route Priority and Manipulation
 
-BIRD implements sophisticated route selection using multiple BGP attributes:
+BIRD implements sophisticated route selection. When ECMP is enabled, routes use identical BGP attributes for equal-cost multipath routing. When path isolation is enabled, routes are tagged with path communities.
 
-### 1. Local Preference (Higher = Better)
+### ECMP Mode
 
-```
-Local Preference = (3 - gre_index + 1) * 100
-```
+When `enable_ecmp: true`:
+- All tunnel paths use identical BGP attributes (MED: 100, Local Pref: 300)
+- Linux kernel installs multiple routes as ECMP
+- Traffic is load-balanced across all available paths
 
-- gre1: 300
-- gre2: 200
-- gre3: 100
+### Path Isolation Mode
 
-**Impact**: Routes through gre1 are most preferred, gre3 least preferred.
+When `enable_path_isolation: true`:
+- Routes are tagged with path communities (65000:{group_num})
+- Routes from the same tunnel path are preferred
+- Enables traffic isolation per tunnel path
 
-### 2. AS Path Prepending (Shorter = Better)
+### BGP Attributes
 
-```
-Prepend Count = gre_index - 1
-```
-
-- gre1: No prepending (shortest path)
-- gre2: Prepend AS once (path length +1)
-- gre3: Prepend AS twice (path length +2)
-
-**Impact**: Makes paths through higher-indexed tunnels appear longer, reducing their preference.
-
-### 3. MED - Multi-Exit Discriminator (Lower = Better)
-
-```
-MED = gre_index * 100
-```
-
-- gre1: 100
-- gre2: 200
-- gre3: 300
-
-**Impact**: gre1 has lowest MED (most preferred), gre3 has highest (least preferred).
-
-### Combined Effect
-
-The three mechanisms work together to create a clear priority:
-
-**gre1 > gre2 > gre3**
-
-This ensures:
-
-- Primary traffic flows through gre1
-- gre2 is used as backup or for load balancing
-- gre3 is last resort
+Routes use consistent attributes for tunnel-to-tunnel BGP:
+- **MED**: 100
+- **Local Preference**: 300
+- **Path Community**: 65000:{group_num} (when path isolation enabled)
 
 ## Usage
 
-### Deploy BIRD on All GRE Endpoints
+### Deploy BIRD on All Tunnel Endpoints
 
 ```bash
 ansible-playbook -i inventory/sample/hosts.yml site.yml --tags bird
 ```
 
-### Deploy BIRD on Specific Tunnel
+### Deploy BIRD on Specific Tunnel Group
 
 ```bash
-ansible-playbook -i inventory/sample/hosts.yml site.yml --limit gre1 --tags bird
+ansible-playbook -i inventory/sample/hosts.yml site.yml --limit vxlan1 --tags bird
 ```
 
 ### Update BIRD Configuration
@@ -211,9 +184,9 @@ Set to the tunnel local IP address.
 ```
 protocol static {
     ipv4;
-    route 192.168.1.0/24 via "eth0";           # Local subnet
-    route 172.16.234.1/32 via "gre";            # Tunnel endpoint IP
-    route 172.16.234.2/32 via "gre";            # Peer endpoint IP
+    route 192.168.1.0/24 via "eth0";           # Local subnet from physical_interfaces
+    route 192.168.234.1/32 via "vxlan-eth0";   # Tunnel endpoint IP (interface name is dynamic)
+    route 192.168.234.2/32 via "vxlan-eth0";   # Peer endpoint IP
 }
 ```
 
@@ -221,11 +194,11 @@ protocol static {
 
 ```
 protocol bgp bgp_to_node2 {
-    local 172.16.234.1 as 61113;
-    neighbor 172.16.234.2 as 61113;
+    local 192.168.234.1 as 61113;
+    neighbor 192.168.234.2 as 61113;
     ipv4 {
-        export filter nexthops;
-        import all;
+        export filter tunnel_export;
+        import filter tunnel_import;  # Or import all if path isolation disabled
         next hop self;
     };
     direct;
@@ -249,19 +222,25 @@ protocol bgp bgp_to_worker_243 {
 }
 ```
 
-#### 5. Route Filter
+#### 5. Route Filters
 
+Tunnel export filter (for tunnel-to-tunnel BGP):
+```
+function set_tunnel_nexthops()
+{
+  bgp_community.add(PATH_COMMUNITY);  # If path isolation enabled
+  bgp_med = 100;
+  bgp_local_pref = 300;
+  accept;
+}
+```
+
+Worker export filter (for BGP to Kubernetes workers):
 ```
 function set_nexthops()
 {
-    bgp_med = 100;
-    bgp_local_pref = 300;
-    # AS path prepending (if gre_index > 1)
-    accept;
-}
-
-filter nexthops {
-    set_nexthops();
+  bgp_community.add(PATH_COMMUNITY);  # If path isolation enabled
+  accept;
 }
 ```
 
@@ -581,7 +560,9 @@ sudo birdc show route count
 
 ## Integration with Other Roles
 
-- **[GRE Role](../gre/README.md)**: Required prerequisite - provides tunnel infrastructure
+- **[VXLAN Role](../vxlan/README.md)**: Primary tunnel type - provides VXLAN tunnel infrastructure
+- **[WireGuard Role](../wireguard/README.md)**: Alternative tunnel type - provides encrypted tunnels
+- **[GRE Role](../gre/README.md)**: Alternative tunnel type - provides GRE tunnels
 - **[Calico Role](../calico/README.md)**: Optional next step - connects Kubernetes clusters
 
 ## Files Modified
@@ -611,6 +592,6 @@ This role is idempotent:
 ## Related Documentation
 
 - [Main README](../../README.md)
-- [GRE Role Documentation](../gre/README.md) - Required prerequisite
+- [VXLAN Role Documentation](../vxlan/README.md) - Primary prerequisite
 - [Calico Role Documentation](../calico/README.md) - Next level
 - [BIRD Documentation](https://bird.network.cz/)
