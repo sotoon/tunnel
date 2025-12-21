@@ -81,3 +81,5 @@ engine_dynamic_route_probes:
   - label: "target-2"
     url: "http://10.10.0.112:9115/probe?target=192.168.234.4&module=icmp"
     next_hop: "10.10.0.112"
+
+enable_path_isolation: true

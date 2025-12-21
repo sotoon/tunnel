@@ -61,3 +61,4 @@ This role works together with:
 When both tunnel endpoints advertise routes with identical BGP attributes, the Linux kernel will install them as ECMP routes, and these sysctl settings ensure optimal load balancing.
 
 
+

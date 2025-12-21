@@ -6,6 +6,8 @@ log syslog all;
 {% set group_num = tunnel_group | regex_replace('^(gre|wireguard|vxlan)', '') | int %}
 {% set as_prefix = '60' ~ group_num ~ '0' %}  {# Changed 1 to 0 here #}
 {% set enable_ecmp = enable_ecmp | default(false) %}
+{% set enable_path_isolation = enable_path_isolation | default(false) %}
+{% set path_community = '65000:' ~ group_num %}
 {% if 'KUBE_WORKERS_1' in vars and inventory_hostname in KUBE_WORKERS_1 %}
     {% set workers_index = 1 %}
 {% elif 'KUBE_WORKERS_2' in vars and inventory_hostname in KUBE_WORKERS_2 %}
@@ -20,6 +22,11 @@ log syslog all;
 {% else %}
     {% set local_as = '6' ~ group_num ~ workers_index ~ '13' %}
     {% set remote_as = '6' ~ workers_index ~ '012' %}
+{% endif %}
+
+{# Path isolation: Define community for this tunnel path #}
+{% if enable_path_isolation %}
+define PATH_COMMUNITY = (65000, {{ group_num }});
 {% endif %}
 
 function set_nexthops()
@@ -41,11 +48,40 @@ function set_nexthops()
   {% endfor %}
 {% endif %}
 
+{% if enable_path_isolation %}
+  {# Tag routes with our path community when exporting #}
+  bgp_community.add(PATH_COMMUNITY);
+{% endif %}
+
   accept;
 }
 filter nexthops {
   set_nexthops();
 }
+
+{% if enable_path_isolation %}
+{# Import filter for path isolation: prefer routes from same tunnel path #}
+filter path_isolation_import {
+  if (PATH_COMMUNITY ~ bgp_community) then {
+    {# Route came from our path - high preference #}
+    bgp_local_pref = 500;
+  } else {
+    {# Route came from different path - low preference (backup only) #}
+    bgp_local_pref = 50;
+  }
+  accept;
+}
+
+{# Strict path isolation: reject routes from other paths entirely #}
+filter path_isolation_strict {
+  if (PATH_COMMUNITY ~ bgp_community) then {
+    bgp_local_pref = 500;
+    accept;
+  }
+  {# Reject routes without our path community #}
+  reject;
+}
+{% endif %}
 
 {% if local_networks is defined and local_networks|length > 0 %}
 protocol static {
@@ -63,7 +99,11 @@ protocol bgp bgp_to_gateway {
     neighbor {{ tunnel_dest_address }} as {{ gateway_as }};
     ipv4 {
         export filter nexthops;
+{% if enable_path_isolation %}
+        import filter path_isolation_import;
+{% else %}
         import all;
+{% endif %}
         next hop self;
     };
     direct;
@@ -80,7 +120,11 @@ protocol bgp bgp_to_gateway_2 {
     neighbor {{ tunnel_dest_address_2 }} as {{ gateway_as }};
     ipv4 {
         export filter nexthops;
+{% if enable_path_isolation %}
+        import filter path_isolation_import;
+{% else %}
         import all;
+{% endif %}
         next hop self;
     };
     direct;
@@ -97,7 +141,11 @@ protocol bgp bgp_to_node{{ dest_index }} {
     neighbor {{ tunnel_dest_address }} as {{ as_prefix }}{{ dest_index }};
     ipv4 {
         export filter nexthops;
+{% if enable_path_isolation %}
+        import filter path_isolation_import;
+{% else %}
         import all;
+{% endif %}
         next hop self;
     };
     direct;
@@ -115,7 +163,11 @@ protocol bgp bgp_to_node{{ dest_index }}_2 {
     neighbor {{ tunnel_dest_address_2 }} as {{ as_prefix }}{{ dest_index }};
     ipv4 {
         export filter nexthops;
+{% if enable_path_isolation %}
+        import filter path_isolation_import;
+{% else %}
         import all;
+{% endif %}
         next hop self;
     };
     direct;
@@ -143,7 +195,11 @@ protocol bgp bgp_from_client_{{ loop.index }} {
     neighbor {{ client_ip }} as {{ client_as }};
     ipv4 {
         export filter nexthops;
+{% if enable_path_isolation %}
+        import filter path_isolation_import;
+{% else %}
         import all;
+{% endif %}
         next hop self;
     };
     passive;
@@ -162,7 +218,11 @@ protocol bgp bgp_from_client_{{ loop.index }}_2 {
     neighbor {{ client_ip }} as {{ client_as }};
     ipv4 {
         export filter nexthops;
+{% if enable_path_isolation %}
+        import filter path_isolation_import;
+{% else %}
         import all;
+{% endif %}
         next hop self;
     };
     passive;
@@ -177,12 +237,13 @@ protocol bgp bgp_from_client_{{ loop.index }}_2 {
 {% endif %}
 
 {#
-  BGP to Kubernetes Workers:
+  BGP to/from Kubernetes Workers:
   When using Calico with BGPPeer resources, workers connect TO BIRD (passive mode).
   Only create active BGP sessions from BIRD to workers if explicitly enabled.
 #}
 {% set enable_worker_bgp = enable_bird_to_worker_bgp | default(false) %}
 {% if enable_worker_bgp %}
+{# Active BGP sessions: BIRD connects to workers #}
 {% set worker_list = vars['KUBE_WORKERS_' ~ workers_index] | default([]) %}
 
 {% for worker in worker_list %}
@@ -200,7 +261,11 @@ protocol bgp bgp_to_worker_{{ worker.split('.')[-1] }} {
     neighbor {{ worker }} as {{ remote_as }};
     ipv4 {
         export filter nexthops;
+{% if enable_path_isolation %}
+        import filter path_isolation_import;
+{% else %}
         import all;
+{% endif %}
         next hop self;
     };
     direct;
@@ -211,6 +276,34 @@ protocol bgp bgp_to_worker_{{ worker.split('.')[-1] }} {
     error wait time 5,30;
 }
 {% endfor %}
+{% else %}
+{# Passive BGP sessions: Workers connect to BIRD (Calico mode) #}
+{# Create a passive session for each worker that may connect #}
+{% set worker_list = vars['KUBE_WORKERS_' ~ workers_index] | default([]) %}
+{% if worker_list | length > 0 and not is_client %}
+{% set worker_as = '6' ~ workers_index ~ '012' %}
+{% for worker_ip in worker_list %}
+protocol bgp bgp_from_worker_{{ worker_ip.split('.')[-1] }} {
+    local {{ local_ip }} as {{ local_as }};
+    neighbor {{ worker_ip }} as {{ worker_as }};
+    ipv4 {
+        export filter nexthops;
+{% if enable_path_isolation %}
+        import filter path_isolation_import;
+{% else %}
+        import all;
+{% endif %}
+        next hop self;
+    };
+    passive;
+    hold time 240;
+    keepalive time 80;
+    connect delay time 2;
+    connect retry time 5;
+    error wait time 5,30;
+}
+{% endfor %}
+{% endif %}
 {% endif %}
 
 protocol kernel {
